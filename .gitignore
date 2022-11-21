@@ -214,7 +214,8 @@ io_file
 Makefile.config
 
 # build, distribute, and bins (+ python proto bindings)
-build
+build-vscode/*
+build_debug/*
 .build_debug/*
 .build_release/*
 distribute/*
@@ -244,3 +245,5 @@ docs/dev
 
 # Submission zip files
 *.zip
+
+.vscode

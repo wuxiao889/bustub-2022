@@ -32,12 +32,12 @@ class TrieNode {
   /**
    * TODO(P0): Add implementation
    *
-   * @brief Construct a new Trie Node object with the given key char.
+   * @brief Construct a new Trie FrameInfo object with the given key char.
    * is_end_ flag should be initialized to false in this constructor.
    *
    * @param key_char Key character of this trie node
    */
-  explicit TrieNode(char key_char) : key_char_(key_char){}
+  explicit TrieNode(char key_char) : key_char_(key_char) {}
 
   /**
    * TODO(P0): Add implementation
@@ -48,8 +48,9 @@ class TrieNode {
    * @param other_trie_node Old trie node.
    */
   TrieNode(TrieNode &&other_trie_node) noexcept
-      : key_char_(other_trie_node.key_char_), is_end_(other_trie_node.is_end_), children_(std::move(other_trie_node.children_))
-  {}
+      : key_char_(other_trie_node.key_char_),
+        is_end_(other_trie_node.is_end_),
+        children_(std::move(other_trie_node.children_)) {}
 
   /**
    * @brief Destroy the TrieNode object.
@@ -162,7 +163,7 @@ class TrieNode {
    *
    * @param is_end Whether this trie node is ending char of a key string
    */
-  void SetEndNode(bool is_end) { is_end_ = is_end;}
+  void SetEndNode(bool is_end) { is_end_ = is_end; }
 
  protected:
   /** Key character of this trie node */
@@ -221,7 +222,7 @@ class TrieNodeWithValue : public TrieNode {
   TrieNodeWithValue(char key_char, T value) : TrieNode(key_char), value_(value) { SetEndNode(true); }
 
   /**
-   * @brief Destroy the Trie Node With Value object
+   * @brief Destroy the Trie FrameInfo With Value object
    */
   ~TrieNodeWithValue() override = default;
 

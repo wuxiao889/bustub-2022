@@ -12,14 +12,14 @@
 
 #pragma once
 
+#include <ctime>
 #include <limits>
 #include <list>
 #include <mutex>  // NOLINT
+#include <set>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
-#include <set>
-#include <chrono>
 
 #include "common/config.h"
 #include "common/macros.h"
@@ -136,13 +136,11 @@ class LRUKReplacer {
   auto Size() -> size_t;
 
  private:
-  struct Node{
+  struct Node {
     frame_id_t id_;
     int64_t time_;
-    auto operator < (const Node& rhs) const ->bool {
-      return time_ < rhs.time_ ;
-    }
-    Node(frame_id_t id , time_t time): id_(id) , time_(time){};
+    auto operator<(const Node &rhs) const -> bool { return time_ < rhs.time_; }
+    Node(frame_id_t id, time_t time) : id_(id), time_(time) {}
   };
   // TODO(student): implement me! You can replace these member variables as you like.
   // Remove maybe_unused if you start using them.
@@ -151,17 +149,17 @@ class LRUKReplacer {
   size_t replacer_size_;
   size_t k_;
   std::mutex latch_;
-  std::unordered_map<frame_id_t ,time_t > frame_time_map_;
-  std::unordered_map<frame_id_t ,size_t > frame_cnt_map_;
-  std::unordered_map<frame_id_t ,bool > evit_map_;
+  std::unordered_map<frame_id_t, time_t> frame_time_map_;
+  std::unordered_map<frame_id_t, size_t> frame_cnt_map_;
+  std::unordered_map<frame_id_t, bool> evit_map_;
   std::set<Node> inf_set_;
   std::set<Node> kth_set_;
 
-  auto InsertToSet(std::set<Node> &set_ , frame_id_t frame_id) ->void ;
-  auto RemoveFromSet(std::set<Node> &set_ , frame_id_t frame_id) ->void ;
-  auto RemoveAll(frame_id_t frame_id) ->void ;
-  auto EvitFromSet(std::set<Node> &set_ , frame_id_t *frame_id) ->bool;
-  auto GetTimeStamp() ->int64_t ;
+  auto InsertToSet(std::set<Node> &set_, frame_id_t frame_id) -> void;
+  auto RemoveFromSet(std::set<Node> &set_, frame_id_t frame_id) -> void;
+  auto RemoveAll(frame_id_t frame_id) -> void;
+  auto EvitFromSet(std::set<Node> &set_, frame_id_t *frame_id) -> bool;
+  auto GetTimeStamp() -> int64_t;
 };
 
 }  // namespace bustub

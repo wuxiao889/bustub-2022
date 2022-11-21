@@ -42,7 +42,7 @@ endif ()
 
 # CTest
 enable_testing()
-
+option(DCMAKE_EXPORT_COMPILE_COMMANDS ON)
 # clang-format
 
 # attempt to find the binary if user did not specify
@@ -96,7 +96,7 @@ endif ()
 ######################################################################################################################
 # COMPILER SETUP
 ######################################################################################################################
-
+message("${BUSTUB_SANITIZER} sanitizer before.")
 if (NOT BUSTUB_SANITIZER)
     set(BUSTUB_SANITIZER address)
 endif ()

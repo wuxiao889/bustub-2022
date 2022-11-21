@@ -104,7 +104,7 @@ TEST(LRUKReplacerTest, Sample1Test) {
   lru_replacer.RecordAccess(1);
   lru_replacer.RecordAccess(2);
   lru_replacer.RecordAccess(5);
-  lru_replacer.SetEvictable(1,false);
+  lru_replacer.SetEvictable(1, false);
   int value;
   lru_replacer.Evict(&value);
   ASSERT_EQ(2, value);

@@ -14,6 +14,7 @@ file(GLOB_RECURSE BUSTUB_TEST_SOURCES "${PROJECT_SOURCE_DIR}/test/*/*test.cpp")
 add_custom_target(build-tests COMMAND ${CMAKE_CTEST_COMMAND} --show-only)
 add_custom_target(check-tests COMMAND ${CMAKE_CTEST_COMMAND} --verbose)
 
+message("CMAKE_CTEST_COMMAND " ${CMAKE_CTEST_COMMAND})
 ##########################################
 # "make XYZ_test"
 ##########################################
@@ -36,7 +37,7 @@ foreach (bustub_test_source ${BUSTUB_TEST_SOURCES})
             PROPERTIES
             TIMEOUT 30
             )
-    
+
     target_link_libraries(${bustub_test_name} bustub gtest gmock_main)
 
     # Set test target properties and dependencies.
