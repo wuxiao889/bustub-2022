@@ -26,6 +26,29 @@
 
 namespace bustub {
 
+/*
+  1. responsible for fetching database pages from the DiskManager and storing them in memory.
+  2. write dirty pages out to disk (instructed to do so / needs to evict a page to make space for a new page)
+  3. disk_manager  actually reads and writes data to disk
+
+  4. each Page object contains a block of memory that the DiskManager will
+      use as a location to copy the contents of a physical page that it reads from disk.
+  5. reuse the same Page object to store data as it moves back and forth to disk
+  6. The Page object's identifer (page_id) keeps track of what physical page it contains;
+  7. If Page object does not contain a physical page, then its page_id must be set to INVALID_PAGE_ID.
+
+  8. Each Page object also maintains a counter for the number of threads that have "pinned" that page,
+     not allowed to free a Page that is pinned.
+  9. Each Page object also keeps track of whether it is dirty or not.
+     must write the contents of a dirty Page back to disk before that object can be reused.
+
+
+  10. ExtendibleHashTable for the table that maps page_id to frame_id
+  11. the LRUKReplacer to keep track of when Page objects are accessed
+      so that it can decide which one to evict when it must free a frame to make room for copying a new physical page
+      from disk.
+*/
+
 /**
  * BufferPoolManager reads disk pages to and from its internal buffer pool.
  */
@@ -150,9 +173,9 @@ class BufferPoolManagerInstance : public BufferPoolManager {
   /** Array of buffer pool pages. */
   Page *pages_;
   /** Pointer to the disk manager. */
-  DiskManager *disk_manager_ __attribute__((__unused__));
+  DiskManager *disk_manager_;
   /** Pointer to the log manager. Please ignore this for P1. */
-  LogManager *log_manager_ __attribute__((__unused__));
+  LogManager *log_manager_;
   /** Page table for keeping track of buffer pool pages. */
   ExtendibleHashTable<page_id_t, frame_id_t> *page_table_;
   /** Replacer to find unpinned pages for replacement. */
@@ -172,10 +195,20 @@ class BufferPoolManagerInstance : public BufferPoolManager {
    * @brief Deallocate a page on disk. Caller should acquire the latch before calling this function.
    * @param page_id id of the page to deallocate
    */
-  void DeallocatePage(__attribute__((unused)) page_id_t page_id) {
+  void DeallocatePage(page_id_t page_id) {
     // This is a no-nop right now without a more complex data structure to track deallocated pages
   }
 
   // TODO(student): You may add additional private members and helper functions
+
+  /**
+   * @brief reset page data
+   * @param page page to reset
+   */
+  void ResetPage(Page *page) {
+    page->ResetMemory();
+    page->is_dirty_ = false;
+    page->page_id_ = INVALID_PAGE_ID;
+  }
 };
 }  // namespace bustub

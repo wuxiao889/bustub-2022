@@ -167,6 +167,7 @@ class ExtendibleHashTable : public HashTable<K, V> {
      * @return True if the key-value pair is inserted, false otherwise.
      */
     auto Insert(const K &key, const V &value) -> bool;
+    auto PrintAll() -> void;
 
    private:
     // TODO(student): You may add additional private members and helper functions

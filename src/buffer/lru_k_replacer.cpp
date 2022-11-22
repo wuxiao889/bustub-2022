@@ -9,10 +9,10 @@
 // Copyright (c) 2015-2022, Carnegie Mellon University Database Group
 //
 //===----------------------------------------------------------------------===//
-#define LOG_LEVEL 1000
 #include "buffer/lru_k_replacer.h"
-#include <bits/types/time_t.h>
+#include <ctime>
 #include "common/logger.h"
+#include "common/macros.h"
 
 namespace bustub {
 
@@ -40,12 +40,12 @@ void LRUKReplacer::RecordAccess(frame_id_t frame_id) {
   if (use_cnt == k_) {
     RemoveFromSet(inf_set_, frame_id);
     InsertToSet(kth_set_, frame_id);
-    LOG_DEBUG("record %d into kth_set_", frame_id);
+    // LOG_DEBUG("record %d into kth_set_", frame_id);
   } else if (use_cnt > k_) {
     RemoveFromSet(kth_set_, frame_id);
     InsertToSet(kth_set_, frame_id);
   }
-  LOG_DEBUG("record %d access_cnt %lu curr_size %zu", frame_id, frame_cnt_map_[frame_id], cur_size_);
+  // LOG_DEBUG("record %d access_cnt %lu curr_size %zu", frame_id, frame_cnt_map_[frame_id], cur_size_);
 }
 
 void LRUKReplacer::SetEvictable(frame_id_t frame_id, bool set_evictable) {
@@ -57,11 +57,11 @@ void LRUKReplacer::SetEvictable(frame_id_t frame_id, bool set_evictable) {
   if (!evitable_[frame_id] && set_evictable) {
     replacer_size_++;
     cur_size_++;
-    LOG_DEBUG("SetEvictable %d  true curr_size %lu", frame_id, cur_size_);
+    // LOG_DEBUG("SetEvictable %d  true curr_size %lu", frame_id, cur_size_);
   } else if (evitable_[frame_id] && !set_evictable) {
     replacer_size_--;
     cur_size_--;
-    LOG_DEBUG("SetEvictable %d  false curr_size %lu", frame_id, cur_size_);
+    // LOG_DEBUG("SetEvictable %d  false curr_size %lu", frame_id, cur_size_);
   }
   evitable_[frame_id] = set_evictable;
 }
@@ -71,17 +71,14 @@ void LRUKReplacer::Remove(frame_id_t frame_id) {
   if (frame_time_map_.count(frame_id) == 0) {
     return;
   }
-  if (!evitable_[frame_id]) {
-    LOG_DEBUG("Remove %d  unevitable", frame_id);
-    return;
-  }
+  BUSTUB_ASSERT(evitable_[frame_id], "unremovalbe!");
   auto cnt = frame_cnt_map_[frame_id];
   if (cnt >= k_) {
     RemoveFromSet(kth_set_, frame_id);
-    LOG_DEBUG("Remove %d from kth_set_ curr_size %lu", frame_id, cur_size_ - 1);
+    // LOG_DEBUG("Remove %d from kth_set_ curr_size %lu", frame_id, cur_size_ - 1);
   } else {
     RemoveFromSet(inf_set_, frame_id);
-    LOG_DEBUG("Remove %d from inf_set_ curr_size %lu", frame_id, cur_size_ - 1);
+    // LOG_DEBUG("Remove %d from inf_set_ curr_size %lu", frame_id, cur_size_ - 1);
   }
   RemoveAll(frame_id);
   cur_size_--;
@@ -112,7 +109,7 @@ auto LRUKReplacer::EvitFromSet(std::set<Node> &set_, frame_id_t *frame_id) -> bo
       RemoveAll(id);
       *frame_id = id;
       cur_size_--;
-      LOG_DEBUG("evit %d curr_size %zu", id, cur_size_);
+      // LOG_DEBUG("evit %d curr_size %zu", id, cur_size_);
       return true;
     }
   }

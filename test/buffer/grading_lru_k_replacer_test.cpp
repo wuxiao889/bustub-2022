@@ -15,7 +15,7 @@
 
 namespace bustub {
 
-TEST(LRUKReplacerTest, DISABLED_SampleTest) {
+TEST(LRUKReplacerTest, SampleTest) {
   LRUKReplacer lru_replacer(7, 2);
 
   // Scenario: add six elements to the replacer. We have [1,2,3,4,5]. Frame 6 is non-evictable.
@@ -97,7 +97,7 @@ TEST(LRUKReplacerTest, DISABLED_SampleTest) {
   ASSERT_EQ(0, lru_replacer.Size());
 }
 
-TEST(LRUKReplacerTest, DISABLED_Evict) {
+TEST(LRUKReplacerTest, Evict) {
   {
     // Empty and try removing
     LRUKReplacer lru_replacer(10, 2);
@@ -310,7 +310,7 @@ TEST(LRUKReplacerTest, DISABLED_Evict) {
   }
 }
 
-TEST(LRUKReplacerTest, DISABLED_Size) {
+TEST(LRUKReplacerTest, Size) {
   {
     // Size is increased/decreased if SetEvictable's argument is different from node state
     LRUKReplacer lru_replacer(10, 2);
