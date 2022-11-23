@@ -60,7 +60,6 @@ auto BufferPoolManagerInstance::NewPgImp(page_id_t *page_id) -> Page * {
       disk_manager_->WritePage(page->GetPageId(), page->data_);
       ResetPage(page);
     }
-    // LOG_DEBUG("evit frame_id %d",frame_id);
   }
   if (page != nullptr) {
     // Create a new page in the buffer pool
@@ -74,7 +73,6 @@ auto BufferPoolManagerInstance::NewPgImp(page_id_t *page_id) -> Page * {
     // so that the replacer wouldn't evict the frame before the buffer pool manager "Unpin"s it.
     replacer_->SetEvictable(frame_id, false);
     page->pin_count_++;
-    // LOG_DEBUG("new frame_id %d page_id %d",frame_id, *page_id);
   }
   return page;
 }
@@ -188,14 +186,15 @@ auto BufferPoolManagerInstance::DeletePgImp(page_id_t page_id) -> bool {
   if (page->pin_count_ > 0) {
     return false;
   }
-  // After deleting the page from the page table, stop tracking the frame 
+  // After deleting the page from the page table, stop tracking the frame
   // in the replacer and add the frame back to the free list.
   std::lock_guard lock(latch_);
   page_table_->Remove(page_id);
   replacer_->Remove(frame_id);
   free_list_.push_back(frame_id);
 
-  // reset the page's memory and metadata. Finally, you should call DeallocatePage() to imitate freeing the page on the disk.
+  // reset the page's memory and metadata. Finally, you should call DeallocatePage() to imitate freeing the page on the
+  // disk.
   ResetPage(page);
   DeallocatePage(page_id);
   return true;

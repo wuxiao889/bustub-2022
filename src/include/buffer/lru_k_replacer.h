@@ -13,6 +13,7 @@
 #pragma once
 
 #include <ctime>
+#include <functional>
 #include <limits>
 #include <list>
 #include <mutex>  // NOLINT
@@ -139,25 +140,26 @@ class LRUKReplacer {
   struct Node {
     frame_id_t id_;
     int64_t time_;
-    auto operator<(const Node &rhs) const -> bool { return time_ < rhs.time_; }
     Node(frame_id_t id, time_t time) : id_(id), time_(time) {}
+    auto operator<(const Node &rhs) const -> bool { return time_ < rhs.time_; }
   };
   // TODO(student): implement me! You can replace these member variables as you like.
   // Remove maybe_unused if you start using them.
   size_t current_timestamp_{0};
-  size_t cur_size_{0};
-  size_t replacer_size_;
+  size_t cur_size_{0};    // 可驱逐大小
+  size_t replacer_size_;  // 剩余容量
   size_t k_;
   std::mutex latch_;
-  std::unordered_map<frame_id_t, time_t> frame_time_map_;
-  std::unordered_map<frame_id_t, size_t> frame_cnt_map_;
+  std::unordered_map<frame_id_t, time_t> frame_time_;
+  std::unordered_map<frame_id_t, size_t> frame_cnt_;
   std::unordered_map<frame_id_t, bool> evitable_;
+
   std::set<Node> inf_set_;
   std::set<Node> kth_set_;
 
-  auto InsertToSet(std::set<Node> &set_, frame_id_t frame_id) -> void;
-  auto RemoveFromSet(std::set<Node> &set_, frame_id_t frame_id) -> void;
-  auto RemoveAll(frame_id_t frame_id) -> void;
+  auto InsertToSet(frame_id_t frame_id) -> void;
+  auto RemoveFromSet(frame_id_t frame_id) -> void;
+  auto RemoveRecord(frame_id_t frame_id) -> void;
   auto EvitFromSet(std::set<Node> &set_, frame_id_t *frame_id) -> bool;
   auto GetTimeStamp() -> int64_t;
 };
