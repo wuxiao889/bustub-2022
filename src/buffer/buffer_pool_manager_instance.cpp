@@ -16,6 +16,7 @@
 
 #include "common/config.h"
 #include "common/logger.h"
+#include "common/exception.h"
 #include "common/macros.h"
 #include "storage/page/page.h"
 
@@ -33,6 +34,11 @@ BufferPoolManagerInstance::BufferPoolManagerInstance(size_t pool_size, DiskManag
   for (size_t i = 0; i < pool_size_; ++i) {
     free_list_.emplace_back(static_cast<int>(i));
   }
+
+  // TODO(students): remove this line after you have implemented the buffer pool manager
+  throw NotImplementedException(
+      "BufferPoolManager is not implemented yet. If you have finished implementing BPM, please remove the throw "
+      "exception line in `buffer_pool_manager_instance.cpp`.");
 }
 
 BufferPoolManagerInstance::~BufferPoolManagerInstance() {

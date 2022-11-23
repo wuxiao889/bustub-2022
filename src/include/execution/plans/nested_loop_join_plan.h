@@ -16,6 +16,7 @@
 #include <utility>
 #include <vector>
 
+#include "binder/table_ref/bound_join_ref.h"
 #include "catalog/catalog.h"
 #include "execution/expressions/abstract_expression.h"
 #include "execution/plans/abstract_plan.h"
@@ -33,36 +34,42 @@ class NestedLoopJoinPlanNode : public AbstractPlanNode {
    * @param output The output format of this nested loop join node
    * @param children Two sequential scan children plans
    * @param predicate The predicate to join with, the tuples are joined
-   * if predicate(tuple) = true or predicate = `nullptr`
+   * if predicate(tuple) = true.
    */
-  NestedLoopJoinPlanNode(const Schema *output_schema, std::vector<const AbstractPlanNode *> &&children,
-                         const AbstractExpression *predicate)
-      : AbstractPlanNode(output_schema, std::move(children)), predicate_(predicate) {}
+  NestedLoopJoinPlanNode(SchemaRef output_schema, AbstractPlanNodeRef left, AbstractPlanNodeRef right,
+                         AbstractExpressionRef predicate, JoinType join_type)
+      : AbstractPlanNode(std::move(output_schema), {std::move(left), std::move(right)}),
+        predicate_(std::move(predicate)),
+        join_type_(join_type) {}
 
   /** @return The type of the plan node */
   auto GetType() const -> PlanType override { return PlanType::NestedLoopJoin; }
 
   /** @return The predicate to be used in the nested loop join */
-  auto Predicate() const -> const AbstractExpression * { return predicate_; }
+  auto Predicate() const -> const AbstractExpression & { return *predicate_; }
+
+  /** @return The join type used in the nested loop join */
+  auto GetJoinType() const -> JoinType { return join_type_; };
 
   /** @return The left plan node of the nested loop join, by convention it should be the smaller table */
-  auto GetLeftPlan() const -> const AbstractPlanNode * {
-    BUSTUB_ASSERT(GetChildren().size() == 2, "Nested loop joins should have exactly two children plans.");
-    return GetChildAt(0);
-  }
+  auto GetLeftPlan() const -> AbstractPlanNodeRef { return GetChildAt(0); }
 
   /** @return The right plan node of the nested loop join */
-  auto GetRightPlan() const -> const AbstractPlanNode * {
-    BUSTUB_ASSERT(GetChildren().size() == 2, "Nested loop joins should have exactly two children plans.");
-    return GetChildAt(1);
-  }
+  auto GetRightPlan() const -> AbstractPlanNodeRef { return GetChildAt(1); }
+
+  static auto InferJoinSchema(const AbstractPlanNode &left, const AbstractPlanNode &right) -> Schema;
+
+  BUSTUB_PLAN_NODE_CLONE_WITH_CHILDREN(NestedLoopJoinPlanNode);
 
   /** The join predicate */
-  const AbstractExpression *predicate_;
+  AbstractExpressionRef predicate_;
+
+  /** The join type */
+  JoinType join_type_;
 
  protected:
   auto PlanNodeToString() const -> std::string override {
-    return fmt::format("NestedLoopJoin {{ predicate={} }}", *predicate_);
+    return fmt::format("NestedLoopJoin {{ type={}, predicate={} }}", join_type_, predicate_);
   }
 };
 

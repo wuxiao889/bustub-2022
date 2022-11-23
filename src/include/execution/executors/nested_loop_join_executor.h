@@ -44,13 +44,13 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
   /**
    * Yield the next tuple from the join.
    * @param[out] tuple The next tuple produced by the join
-   * @param[out] rid The next tuple RID produced by the join
-   * @return `true` if a tuple was produced, `false` if there are no more tuples
+   * @param[out] rid The next tuple RID produced, not used by nested loop join.
+   * @return `true` if a tuple was produced, `false` if there are no more tuples.
    */
   auto Next(Tuple *tuple, RID *rid) -> bool override;
 
   /** @return The output schema for the insert */
-  auto GetOutputSchema() -> const Schema * override { return plan_->OutputSchema(); };
+  auto GetOutputSchema() const -> const Schema & override { return plan_->OutputSchema(); };
 
  private:
   /** The NestedLoopJoin plan node to be executed. */

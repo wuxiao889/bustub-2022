@@ -27,22 +27,18 @@ class ConstantValueExpression : public AbstractExpression {
   /** Creates a new constant value expression wrapping the given value. */
   explicit ConstantValueExpression(const Value &val) : AbstractExpression({}, val.GetTypeId()), val_(val) {}
 
-  auto Evaluate(const Tuple *tuple, const Schema *schema) const -> Value override { return val_; }
+  auto Evaluate(const Tuple *tuple, const Schema &schema) const -> Value override { return val_; }
 
-  auto EvaluateJoin(const Tuple *left_tuple, const Schema *left_schema, const Tuple *right_tuple,
-                    const Schema *right_schema) const -> Value override {
-    return val_;
-  }
-
-  auto EvaluateAggregate(const std::vector<Value> &group_bys, const std::vector<Value> &aggregates) const
-      -> Value override {
+  auto EvaluateJoin(const Tuple *left_tuple, const Schema &left_schema, const Tuple *right_tuple,
+                    const Schema &right_schema) const -> Value override {
     return val_;
   }
 
   /** @return the string representation of the plan node and its children */
   auto ToString() const -> std::string override { return val_.ToString(); }
 
- private:
+  BUSTUB_EXPR_CLONE_WITH_CHILDREN(ConstantValueExpression);
+
   Value val_;
 };
 }  // namespace bustub

@@ -10,6 +10,17 @@ project(BusTub
         LANGUAGES C CXX
         )
 
+if (NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+    message(STATUS "Setting build type to `Debug` as none was specified.")
+    set(CMAKE_BUILD_TYPE "Debug")
+endif ()
+
+
+if (EMSCRIPTEN)
+    add_compile_options(-fexceptions)
+    add_link_options(-fexceptions)
+endif ()
+
 # People keep running CMake in the wrong folder, completely nuking their project or creating weird bugs.
 # This checks if you're running CMake from a folder that already has CMakeLists.txt.
 # Importantly, this catches the common case of running it from the root directory.
@@ -102,13 +113,16 @@ if (NOT BUSTUB_SANITIZER)
 endif ()
 
 message("Build mode: ${CMAKE_BUILD_TYPE}")
-message("${BUSTUB_SANITIZER} sanitizer enabled in debug mode.")
+message("${BUSTUB_SANITIZER} sanitizer will be enabled in debug mode.")
 
 # Compiler flags.
+set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -Wall -Wextra -Werror")
+set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -Wno-unused-parameter -Wno-attributes") #TODO: remove
+set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0 -ggdb -fsanitize=${BUSTUB_SANITIZER} -fno-omit-frame-pointer -fno-optimize-sibling-calls")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Werror")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unused-parameter -Wno-attributes") #TODO: remove
 # set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0 -ggdb -fsanitize=${BUSTUB_SANITIZER} -fno-omit-frame-pointer -fno-optimize-sibling-calls")
-set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0 -ggdb ")
+# set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0 -ggdb ")
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 message(STATUS "CMAKE_CXX_FLAGS: ${CMAKE_CXX_FLAGS}")
@@ -124,7 +138,12 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 # Includes.
 set(BUSTUB_SRC_INCLUDE_DIR ${PROJECT_SOURCE_DIR}/src/include)
 set(BUSTUB_TEST_INCLUDE_DIR ${PROJECT_SOURCE_DIR}/test/include)
-set(BUSTUB_THIRD_PARTY_INCLUDE_DIR ${PROJECT_SOURCE_DIR}/third_party ${PROJECT_SOURCE_DIR}/third_party/fmt/include ${PROJECT_SOURCE_DIR}/third_party/libpg_query/include)
+set(BUSTUB_THIRD_PARTY_INCLUDE_DIR
+        ${PROJECT_SOURCE_DIR}/third_party
+        ${PROJECT_SOURCE_DIR}/third_party/fmt/include
+        ${PROJECT_SOURCE_DIR}/third_party/libpg_query/include
+        ${PROJECT_SOURCE_DIR}/third_party/argparse/include
+        )
 
 include_directories(${BUSTUB_SRC_INCLUDE_DIR} ${BUSTUB_TEST_INCLUDE_DIR} ${BUSTUB_THIRD_PARTY_INCLUDE_DIR})
 include_directories(BEFORE src) # This is needed for gtest.
@@ -259,5 +278,95 @@ add_custom_target(submit-p1
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
         )
 
+set(P2_FILES
+        "src/include/storage/page/b_plus_tree_page.h"
+        "src/storage/page/b_plus_tree_page.cpp"
+        "src/include/storage/page/b_plus_tree_internal_page.h"
+        "src/storage/page/b_plus_tree_internal_page.cpp"
+        "src/include/storage/page/b_plus_tree_leaf_page.h"
+        "src/storage/page/b_plus_tree_leaf_page.cpp"
+        "src/include/storage/index/index_iterator.h"
+        "src/storage/index/index_iterator.cpp"
+        "src/include/storage/index/b_plus_tree.h"
+        "src/storage/index/b_plus_tree.cpp"
+        ${P1_FILES}
+        )
+add_custom_target(check-clang-tidy-p2
+        ${BUSTUB_BUILD_SUPPORT_DIR}/run_clang_tidy.py                     # run LLVM's clang-tidy script
+        -clang-tidy-binary ${CLANG_TIDY_BIN}                              # using our clang-tidy binary
+        -p ${CMAKE_BINARY_DIR}                                            # using cmake's generated compile commands
+        ${P2_FILES}
+        )
+add_custom_target(submit-p2
+        zip project2-submission.zip
+        ${P2_FILES}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        )
+
+set(P3_FILES
+        "src/include/execution/executors/aggregation_executor.h"
+        "src/include/execution/executors/delete_executor.h"
+        "src/include/execution/executors/filter_executor.h"
+        "src/include/execution/executors/hash_join_executor.h"
+        "src/include/execution/executors/index_scan_executor.h"
+        "src/include/execution/executors/insert_executor.h"
+        "src/include/execution/executors/limit_executor.h"
+        "src/include/execution/executors/nested_index_join_executor.h"
+        "src/include/execution/executors/nested_loop_join_executor.h"
+        "src/include/execution/executors/seq_scan_executor.h"
+        "src/include/execution/executors/sort_executor.h"
+        "src/include/execution/executors/topn_executor.h"
+        "src/execution/aggregation_executor.cpp"
+        "src/execution/delete_executor.cpp"
+        "src/execution/filter_executor.cpp"
+        "src/execution/hash_join_executor.cpp"
+        "src/execution/index_scan_executor.cpp"
+        "src/execution/insert_executor.cpp"
+        "src/execution/limit_executor.cpp"
+        "src/execution/nested_index_join_executor.cpp"
+        "src/execution/nested_loop_join_executor.cpp"
+        "src/execution/seq_scan_executor.cpp"
+        "src/execution/sort_executor.cpp"
+        "src/execution/topn_executor.cpp"
+        "src/include/optimizer/optimizer.h"
+        "src/optimizer/optimizer_custom_rules.cpp"
+        "src/optimizer/sort_limit_as_topn.cpp"
+        ${P2_FILES}
+        )
+
+add_custom_target(check-clang-tidy-p3
+        ${BUSTUB_BUILD_SUPPORT_DIR}/run_clang_tidy.py                     # run LLVM's clang-tidy script
+        -clang-tidy-binary ${CLANG_TIDY_BIN}                              # using our clang-tidy binary
+        -p ${CMAKE_BINARY_DIR}                                            # using cmake's generated compile commands
+        ${P3_FILES}
+        )
+add_custom_target(submit-p3
+        zip project3-submission.zip
+        ${P3_FILES}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        )
+
+set(P4_FILES
+        "src/include/concurrency/lock_manager.h"
+        "src/concurrency/lock_manager.cpp"
+        "src/include/execution/executors/update_executor.h"
+        "src/execution/update_executor.cpp"
+        "src/include/execution/plans/index_scan_plan.h"
+        "tools/terrier_bench/terrier_bench_config.h"
+        ${P3_FILES}
+        )
+
+add_custom_target(check-clang-tidy-p4
+        ${BUSTUB_BUILD_SUPPORT_DIR}/run_clang_tidy.py                     # run LLVM's clang-tidy script
+        -clang-tidy-binary ${CLANG_TIDY_BIN}                              # using our clang-tidy binary
+        -p ${CMAKE_BINARY_DIR}                                            # using cmake's generated compile commands
+        ${P4_FILES}
+        )
+
+add_custom_target(submit-p4
+        zip project4-submission.zip
+        ${P4_FILES}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        )
 
 add_dependencies(check-clang-tidy gtest bustub)                    # needs gtest headers, compile_commands.json
