@@ -1,5 +1,8 @@
 #include <cassert>
 #include <cstdio>
+#include <cstring>
+#include <functional>
+#include <iostream>
 #include <string>
 #include <utility>
 
@@ -67,7 +70,7 @@ auto BPLUSTREE_TYPE::FindLeaf(const KeyType &key, BPlusTreePage *cur_page) -> st
     }
     InternalPage *page = CastInternalPage(cur_page);
     int idx = page->LowerBound(key, comparator_);
-    cur_page = FetchPageAt(page, idx);
+    cur_page = FetchPageAt(page, idx - 1);
     UnPinPage(cur_page, false);
   }
   UnPinPage(cur_page, false);
@@ -135,13 +138,12 @@ void BPLUSTREE_TYPE::SplitLeaf(LeafPage *left_page) {
 
   int right_page_id;
   LeafPage *right_page = NewLeafPage(&right_page_id, left_page->GetParentPageId());
-  // right_page->SetSize(leaf_max_size_ - x);
 
   for (int i = x, j = 0; i < leaf_max_size_; i++, j++) {
     right_page->Insert(j, left_page->KeyAt(i), left_page->ValueAt(i));
   }
-  left_page->SetSize(x);
 
+  left_page->SetSize(x);
   assert(right_page->GetSize() == leaf_max_size_ - x);
 
   KeyType key = right_page->KeyAt(0);
@@ -171,7 +173,6 @@ void BPLUSTREE_TYPE::SplitLeaf(LeafPage *left_page) {
               index);
     right_page->SetNextPageId(left_page->GetNextPageId());
     left_page->SetNextPageId(right_page_id);
-    // Print(buffer_pool_manager_);
     UnPinPage(parent_page, true);
   }
   UnPinPage(left_page, true);
@@ -181,45 +182,37 @@ void BPLUSTREE_TYPE::SplitLeaf(LeafPage *left_page) {
 INDEX_TEMPLATE_ARGUMENTS
 void BPLUSTREE_TYPE::SplitInternal(InternalPage *left_page) {
   LOG_DEBUG("internal page %d split", left_page->GetPageId());
-  // 0 1 2  size = 3
-  // x = 1
-  //  1
-  // 0 2
   int x;
   x = (leaf_max_size_ + 1) / 2;
   int right_page_id;
   InternalPage *right_page = NewInternalPage(&right_page_id, left_page->GetParentPageId());
 
   for (int i = x, j = 0; i <= internal_max_size_; i++, j++) {
+    assert(left_page->ValueAt(i) != INVALID_PAGE_ID);
     right_page->SetKeyAt(j, left_page->KeyAt(i));
     right_page->SetValueAt(j, left_page->ValueAt(i));
-    if (j == 0) {
-      right_page->SetKeyAt(0, KeyType{});
-    }
+    left_page->SetValueAt(i, INVALID_PAGE_ID);
   }
-
   left_page->SetSize(x);
-  // assert(right_page->GetSize() == internal_max_size_ - x - 1);
-
+  right_page->SetSize(internal_max_size_ - x + 1);
   for (int i = 0; i < right_page->GetSize(); i++) {
     BPlusTreePage *child_page = FetchPageAt(right_page, i);
     child_page->SetParentPageId(right_page_id);
     UnPinPage(child_page, true);
   }
 
-  KeyType key = left_page->KeyAt(x);
+  KeyType key = right_page->KeyAt(0);
+  right_page->SetKeyAt(0, KeyType{});
 
   if (left_page->IsRootPage()) {
     InternalPage *root_page = NewInternalRootPage(&root_page_id_);
     UpdateRootPageId(0);
-
     left_page->SetParentPageId(root_page_id_);
     right_page->SetParentPageId(root_page_id_);
     root_page->Insert(0, KeyType{}, left_page->GetPageId());
     root_page->Insert(1, key, right_page_id);
     assert(root_page->GetSize() == 2);
     UnPinPage(root_page, true);
-
   } else {
     InternalPage *parent_page = FetchParent(left_page);
     int index = parent_page->LowerBound(key, comparator_);
@@ -498,7 +491,7 @@ auto BPLUSTREE_TYPE::NewLeafPage(page_id_t *page_id, page_id_t parent_id) -> Lea
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::NewLeafRootPage(page_id_t *page_id) -> LeafPage * {
   LeafPage *p = CastLeafPage(PageToB(buffer_pool_manager_->NewPage(page_id)));
-  p->Init(*page_id, *page_id, leaf_max_size_);
+  p->Init(*page_id, INVALID_PAGE_ID, leaf_max_size_);
   return p;
 }
 
@@ -512,7 +505,7 @@ auto BPLUSTREE_TYPE::NewInternalPage(page_id_t *page_id, page_id_t parent_id) ->
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::NewInternalRootPage(page_id_t *page_id) -> InternalPage * {
   InternalPage *p = CastInternalPage(PageToB(buffer_pool_manager_->NewPage(page_id)));
-  p->Init(*page_id, *page_id, internal_max_size_);
+  p->Init(*page_id, INVALID_PAGE_ID, internal_max_size_);
   return p;
 }
 
