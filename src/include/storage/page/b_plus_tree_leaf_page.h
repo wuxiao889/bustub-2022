@@ -49,10 +49,20 @@ class BPlusTreeLeafPage : public BPlusTreePage {
   auto GetNextPageId() const -> page_id_t;
   void SetNextPageId(page_id_t next_page_id);
   auto KeyAt(int index) const -> KeyType;
+  auto LowerBound(const KeyType &key, const KeyComparator &cmp) -> int;
+  auto ValueAt(int index) const -> ValueType;
 
+  void Insert(int index, const KeyType &key, const ValueType &value);
+  
+  auto Begin() -> MappingType * { return array_; }
+  auto Begin() const -> const MappingType * { return array_; }
+  auto End() -> MappingType * { return array_ + GetSize(); }
+  auto End() const -> const MappingType * { return array_ + GetSize(); }
  private:
   page_id_t next_page_id_;
   // Flexible array member for page data.
+
+  // keyType , valuetype = record id
   MappingType array_[1];
 };
 }  // namespace bustub

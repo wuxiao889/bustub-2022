@@ -96,17 +96,17 @@ TEST(BufferPoolManagerInstanceTest, BinaryDataTest) {  // NOLINT
   ASSERT_NE(nullptr, page0);
   ASSERT_EQ(0, page_id_temp);
 
-  char random_binary_data[PAGE_SIZE];
+  char random_binary_data[BUSTUB_PAGE_SIZE];
   unsigned int seed = 15645;
   for (char &i : random_binary_data) {
     i = static_cast<char>(rand_r(&seed) % 256);
   }
 
-  random_binary_data[PAGE_SIZE / 2] = '\0';
-  random_binary_data[PAGE_SIZE - 1] = '\0';
+  random_binary_data[BUSTUB_PAGE_SIZE / 2] = '\0';
+  random_binary_data[BUSTUB_PAGE_SIZE - 1] = '\0';
 
   // Scenario: Once we have a page, we should be able to read and write content.
-  std::strncpy(page0->GetData(), random_binary_data, PAGE_SIZE);
+  std::strncpy(page0->GetData(), random_binary_data, BUSTUB_PAGE_SIZE);
   ASSERT_EQ(0, std::strcmp(page0->GetData(), random_binary_data));
 
   // Scenario: We should be able to create new pages until we fill up the buffer pool.

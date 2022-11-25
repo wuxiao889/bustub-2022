@@ -12,12 +12,16 @@
 
 #include <queue>
 #include <string>
+#include <utility>
 #include <vector>
 
+#include "common/config.h"
 #include "concurrency/transaction.h"
 #include "storage/index/index_iterator.h"
 #include "storage/page/b_plus_tree_internal_page.h"
 #include "storage/page/b_plus_tree_leaf_page.h"
+#include "storage/page/b_plus_tree_page.h"
+#include "storage/page/page.h"
 
 namespace bustub {
 
@@ -33,7 +37,8 @@ namespace bustub {
  * (3) The structure should shrink and grow dynamically
  * (4) Implement index iterator for range scan
  */
-INDEX_TEMPLATE_ARGUMENTS
+// INDEX_TEMPLATE_ARGUMENTS
+template <typename KeyType, typename ValueType, typename KeyComparator>
 class BPlusTree {
   using InternalPage = BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator>;
   using LeafPage = BPlusTreeLeafPage<KeyType, ValueType, KeyComparator>;
@@ -75,12 +80,45 @@ class BPlusTree {
   void RemoveFromFile(const std::string &file_name, Transaction *transaction = nullptr);
 
  private:
+  struct Iter {
+    BPlusTreePage *page_;
+    int index_;
+    Iter() : page_(nullptr), index_(-1) {}
+    Iter(BPlusTreePage *page, int index) : page_(page), index_(index) {}
+    Iter(const Iter &x) : page_(x.page_), index_(x.index_) {}
+    // auto operator*() const -> BPlusTreePage & { return *page_; }
+  };
+
+  auto FindLeaf(const KeyType &key, BPlusTreePage *cur_page) -> std::pair<Iter, bool>;
+  auto InsertToPageUnique(BPlusTreePage *page, const KeyType &key, const ValueType &value,
+                          Transaction *transaction = nullptr) -> bool;
+  void SplitLeaf(LeafPage *page);
+  void SplitInternal(InternalPage *page);
   void UpdateRootPageId(int insert_record = 0);
 
   /* Debug Routines for FREE!! */
   void ToGraph(BPlusTreePage *page, BufferPoolManager *bpm, std::ofstream &out) const;
 
   void ToString(BPlusTreePage *page, BufferPoolManager *bpm) const;
+
+  auto PageToB(Page *page) -> BPlusTreePage * { return reinterpret_cast<BPlusTreePage *>(page->GetData()); }
+  // auto PageToL(Page *page) -> LeafPage * { return reinterpret_cast<LeafPage *>(page->GetData()); }
+  // auto PageToI(Page *page) -> InternalPage * { return reinterpret_cast<InternalPage *>(page->GetData()); }
+
+  auto CastLeafPage(BPlusTreePage *page) -> LeafPage * { return static_cast<LeafPage *>(page); }
+  auto CastInternalPage(BPlusTreePage *page) -> InternalPage * { return static_cast<InternalPage *>(page); }
+
+  auto NewLeafPage(page_id_t *page_id, page_id_t parent_id) -> LeafPage *;
+  auto NewLeafRootPage(page_id_t *page_id) -> LeafPage *;
+  auto NewInternalPage(page_id_t *page_id, page_id_t parent_id) -> InternalPage *;
+  auto NewInternalRootPage(page_id_t *page_id) -> InternalPage *;
+
+  auto FetchPage(page_id_t page_id) -> BPlusTreePage *;
+  auto FetchParent(BPlusTreePage *page) -> InternalPage *;
+  // auto FetchPageById(page_id_t page_id) -> InternalPage * { return CastInternalPage(FetchPage(page_id)); }
+  auto FetchPageAt(InternalPage *page, int index) -> BPlusTreePage *;
+
+  auto UnPinPage(BPlusTreePage *page, bool is_dirty) const;
 
   // member variable
   std::string index_name_;

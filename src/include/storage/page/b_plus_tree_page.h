@@ -62,6 +62,9 @@ class BPlusTreePage {
 
   void SetLSN(lsn_t lsn = INVALID_LSN);
 
+  auto GetPosition() const -> int;
+  void SetPosition(int position);
+
  private:
   // member variable, attributes that both internal and leaf page share
   IndexPageType page_type_ __attribute__((__unused__));
@@ -70,6 +73,8 @@ class BPlusTreePage {
   int max_size_ __attribute__((__unused__));
   page_id_t parent_page_id_ __attribute__((__unused__));
   page_id_t page_id_ __attribute__((__unused__));
+
+  int position_ __attribute__((__unused__));
 };
 
 }  // namespace bustub

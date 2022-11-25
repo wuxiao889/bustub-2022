@@ -32,6 +32,7 @@ namespace bustub {
  * | HEADER | KEY(1)+PAGE_ID(1) | KEY(2)+PAGE_ID(2) | ... | KEY(n)+PAGE_ID(n) |
  *  --------------------------------------------------------------------------
  */
+// template <typename KeyType, typename ValueType, typename KeyComparator>
 INDEX_TEMPLATE_ARGUMENTS
 class BPlusTreeInternalPage : public BPlusTreePage {
  public:
@@ -39,10 +40,14 @@ class BPlusTreeInternalPage : public BPlusTreePage {
   void Init(page_id_t page_id, page_id_t parent_id = INVALID_PAGE_ID, int max_size = INTERNAL_PAGE_SIZE);
 
   auto KeyAt(int index) const -> KeyType;
-  void SetKeyAt(int index, const KeyType &key);
   auto ValueAt(int index) const -> ValueType;
+  void SetKeyAt(int index, const KeyType &key);
+  void SetValueAt(int index, const ValueType& value);
+  auto Insert(int index, const KeyType &key, const ValueType &value) -> void;
+  auto LowerBound(const KeyType &key, const KeyComparator &cmp) -> int;
 
  private:
+  // std::pair<KeyType, ValueType>
   // Flexible array member for page data.
   MappingType array_[1];
 };

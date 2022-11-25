@@ -90,6 +90,12 @@ auto HeaderPage::GetRecordCount() -> int { return *reinterpret_cast<int *>(GetDa
 
 void HeaderPage::SetRecordCount(int record_count) { memcpy(GetData(), &record_count, 4); }
 
+/**
+ * @brief 线性查找
+ * 
+ * @param name 
+ * @return int  i idx , -1 not found
+ */
 auto HeaderPage::FindRecord(const std::string &name) -> int {
   int record_num = GetRecordCount();
 
