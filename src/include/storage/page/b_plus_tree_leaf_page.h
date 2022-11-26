@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "storage/page/b_plus_tree_page.h"
+#include "storage/page/hash_table_page_defs.h"
 
 namespace bustub {
 
@@ -39,7 +40,7 @@ namespace bustub {
  * | ParentPageId (4) | PageId (4) | NextPageId (4)
  *  -----------------------------------------------
  */
-INDEX_TEMPLATE_ARGUMENTS
+template <typename KeyType, typename ValueType, typename KeyComparator>
 class BPlusTreeLeafPage : public BPlusTreePage {
  public:
   // After creating a new leaf page from buffer pool, must call initialize
@@ -49,15 +50,13 @@ class BPlusTreeLeafPage : public BPlusTreePage {
   auto GetNextPageId() const -> page_id_t;
   void SetNextPageId(page_id_t next_page_id);
   auto KeyAt(int index) const -> KeyType;
-  auto LowerBound(const KeyType &key, const KeyComparator &cmp) -> int;
   auto ValueAt(int index) const -> ValueType;
 
   void Insert(int index, const KeyType &key, const ValueType &value);
-  
-  auto Begin() -> MappingType * { return array_; }
-  auto Begin() const -> const MappingType * { return array_; }
-  auto End() -> MappingType * { return array_ + GetSize(); }
-  auto End() const -> const MappingType * { return array_ + GetSize(); }
+  auto LowerBound(const KeyType &key, const KeyComparator &cmp) -> int;
+
+  auto operator[](int index) -> MappingType & { return array_[index]; }
+
  private:
   page_id_t next_page_id_;
   // Flexible array member for page data.

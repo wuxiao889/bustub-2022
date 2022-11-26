@@ -42,6 +42,7 @@ template <typename KeyType, typename ValueType, typename KeyComparator>
 class BPlusTree {
   using InternalPage = BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator>;
   using LeafPage = BPlusTreeLeafPage<KeyType, ValueType, KeyComparator>;
+  using Iterator = IndexIterator<KeyType, ValueType, KeyComparator>;
 
  public:
   explicit BPlusTree(std::string name, BufferPoolManager *buffer_pool_manager, const KeyComparator &comparator,
@@ -80,22 +81,13 @@ class BPlusTree {
   void RemoveFromFile(const std::string &file_name, Transaction *transaction = nullptr);
 
  private:
-  struct Iter {
-    BPlusTreePage *page_;
-    int index_;
-    Iter() : page_(nullptr), index_(-1) {}
-    Iter(BPlusTreePage *page, int index) : page_(page), index_(index) {}
-    Iter(const Iter &x) : page_(x.page_), index_(x.index_) {}
-    // auto operator*() const -> BPlusTreePage & { return *page_; }
-  };
-
-  auto FindLeaf(const KeyType &key, BPlusTreePage *cur_page) -> std::pair<Iter, bool>;
+  auto LoopUp(const KeyType &key, BPlusTreePage *cur_page) -> std::pair<LeafPage *, int>;
   auto InsertToPageUnique(BPlusTreePage *page, const KeyType &key, const ValueType &value,
                           Transaction *transaction = nullptr) -> bool;
   void SplitLeaf(LeafPage *page);
   void SplitInternal(InternalPage *page);
-  void UpdateRootPageId(int insert_record = 0);
 
+  void UpdateRootPageId(int insert_record = 0);
   /* Debug Routines for FREE!! */
   void ToGraph(BPlusTreePage *page, BufferPoolManager *bpm, std::ofstream &out) const;
 
@@ -104,7 +96,6 @@ class BPlusTree {
   auto PageToB(Page *page) -> BPlusTreePage * { return reinterpret_cast<BPlusTreePage *>(page->GetData()); }
   // auto PageToL(Page *page) -> LeafPage * { return reinterpret_cast<LeafPage *>(page->GetData()); }
   // auto PageToI(Page *page) -> InternalPage * { return reinterpret_cast<InternalPage *>(page->GetData()); }
-
   auto CastLeafPage(BPlusTreePage *page) -> LeafPage * { return static_cast<LeafPage *>(page); }
   auto CastInternalPage(BPlusTreePage *page) -> InternalPage * { return static_cast<InternalPage *>(page); }
 
@@ -114,9 +105,9 @@ class BPlusTree {
   auto NewInternalRootPage(page_id_t *page_id) -> InternalPage *;
 
   auto FetchPage(page_id_t page_id) -> BPlusTreePage *;
+  auto FetchChild(InternalPage *page, int index) -> BPlusTreePage *;
+
   auto FetchParent(BPlusTreePage *page) -> InternalPage *;
-  // auto FetchPageById(page_id_t page_id) -> InternalPage * { return CastInternalPage(FetchPage(page_id)); }
-  auto FetchPageAt(InternalPage *page, int index) -> BPlusTreePage *;
 
   auto UnPinPage(BPlusTreePage *page, bool is_dirty) const;
 
@@ -127,6 +118,9 @@ class BPlusTree {
   KeyComparator comparator_;
   int leaf_max_size_;
   int internal_max_size_;
+
+  page_id_t left_most_;
+  page_id_t right_most_;
 };
 
 }  // namespace bustub

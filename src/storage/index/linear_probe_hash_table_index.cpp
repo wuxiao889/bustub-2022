@@ -40,6 +40,7 @@ void HASH_TABLE_INDEX_TYPE::ScanKey(const Tuple &key, std::vector<RID> *result, 
 
   container_.GetValue(transaction, index_key, result);
 }
+
 template class LinearProbeHashTableIndex<GenericKey<4>, RID, GenericComparator<4>>;
 template class LinearProbeHashTableIndex<GenericKey<8>, RID, GenericComparator<8>>;
 template class LinearProbeHashTableIndex<GenericKey<16>, RID, GenericComparator<16>>;

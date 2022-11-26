@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "buffer/buffer_pool_manager_instance.h"
+#include <cassert>
 #include <cstddef>
 #include <mutex>  // NOLINT
 
