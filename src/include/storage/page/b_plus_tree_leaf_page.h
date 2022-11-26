@@ -63,6 +63,8 @@ class BPlusTreeLeafPage : public BPlusTreePage {
   void ShiftLeft(int i = 0);
   void ShiftRight();
 
+  void Copy(const BPlusTreePage* p, int dst,int first,int last);
+  
  private:
   page_id_t next_page_id_;
   // Flexible array member for page data.

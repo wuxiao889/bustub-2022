@@ -85,7 +85,7 @@ class BPlusTree {
   auto InsertAux(BPlusTreePage *page, const KeyType &key, const ValueType &value, Transaction *transaction = nullptr)
       -> bool;
 
-  void RemoveAux(BPlusTreePage *page, const KeyType &key, Transaction *transaction = nullptr);
+  void RemoveInPage(BPlusTreePage *page, const KeyType &key, Transaction *transaction = nullptr);
   void BrowFromLeft();
   void BrowFrowRight();
 
@@ -127,6 +127,8 @@ class BPlusTree {
   auto UpdataRoot();
 
   auto CalcPositionInParent(BPlusTreePage *page) -> int;
+
+  void CheckPinCount();
 
   // member variable
   std::string index_name_;

@@ -75,6 +75,7 @@ auto BufferPoolManagerInstance::NewPgImp(page_id_t *page_id) -> Page * {
     // so that the replacer wouldn't evict the frame before the buffer pool manager "Unpin"s it.
     replacer_->SetEvictable(frame_id, false);
     page->pin_count_++;
+    LOG_DEBUG("page %d pin_count increase to %d", *page_id, page->pin_count_);
   }
   return page;
 }
@@ -90,6 +91,7 @@ auto BufferPoolManagerInstance::FetchPgImp(page_id_t page_id) -> Page * {
     replacer_->RecordAccess(frame_id);
     replacer_->SetEvictable(frame_id, false);
     page->pin_count_++;
+    LOG_DEBUG("page %d pin_count increase to %d", page_id, page->pin_count_);
     return page;
   }
   // If not found, pick a replacement frame from either the free list or the replacer (always find from the free list
@@ -119,6 +121,7 @@ auto BufferPoolManagerInstance::FetchPgImp(page_id_t page_id) -> Page * {
     // disable eviction and record the access history of the frame
     replacer_->RecordAccess(frame_id);
     replacer_->SetEvictable(frame_id, false);
+    LOG_DEBUG("page %d pin_count increase to %d", page_id, page->pin_count_);
   }
   // Return nullptr if page_id needs to be fetched from the disk but all frames are currently in use and not evictable
   // (in another word, pinned).
@@ -135,6 +138,7 @@ auto BufferPoolManagerInstance::UnpinPgImp(page_id_t page_id, bool is_dirty) -> 
   Page *page = pages_ + frame_id;
   // its pin count is already 0, return false.
   if (page->pin_count_ <= 0) {
+    LOG_DEBUG("page %d pin_count already <= 0!", page_id);
     return false;
   }
   // is_dirty true if the page should be marked as dirty, false otherwise
@@ -142,8 +146,10 @@ auto BufferPoolManagerInstance::UnpinPgImp(page_id_t page_id, bool is_dirty) -> 
     page->is_dirty_ = true;
   }
   --page->pin_count_;
+  LOG_DEBUG("page %d pin_count decrease to %d", page_id, page->pin_count_);
   // Decrement the pin count of a page. If the pin count reaches 0, the frame should be evictable by the replacer.
   if (page->pin_count_ == 0) {
+    LOG_DEBUG("page %d pin_count %d evitable!", page_id, page->pin_count_);
     replacer_->SetEvictable(frame_id, true);
   }
   return true;
@@ -186,6 +192,7 @@ auto BufferPoolManagerInstance::DeletePgImp(page_id_t page_id) -> bool {
   Page *page = pages_ + frame_id;
   // If the page is pinned and cannot be deleted, return false immediately.
   if (page->pin_count_ > 0) {
+    LOG_WARN("page %d pin_count %d !", page_id, page->pin_count_);
     return false;
   }
   // After deleting the page from the page table, stop tracking the frame
@@ -203,5 +210,21 @@ auto BufferPoolManagerInstance::DeletePgImp(page_id_t page_id) -> bool {
 }
 
 auto BufferPoolManagerInstance::AllocatePage() -> page_id_t { return next_page_id_++; }
+
+void BufferPoolManagerInstance::CheckPinCount() {
+  std::lock_guard lock(latch_);
+  bool clear = true;
+  for (size_t id = 0; id < pool_size_; ++id) {
+    Page *page = pages_ + id;
+    auto page_id = page->page_id_;
+    if (page_id != INVALID_PAGE_ID && page->pin_count_ > 0) {
+      LOG_WARN("\033[1;31m page %d pin_count %d != 0\033[0m", page->page_id_, page->pin_count_);
+      clear = false;
+    }
+  }
+  if(clear){
+    LOG_WARN("\033[1;31m all clear \033[0m");
+  }
+}
 
 }  // namespace bustub
