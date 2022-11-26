@@ -82,7 +82,7 @@ class BPlusTree {
 
  private:
   auto LoopUp(const KeyType &key, BPlusTreePage *cur_page) -> std::pair<LeafPage *, int>;
-  auto InsertToPageUnique(BPlusTreePage *page, const KeyType &key, const ValueType &value,
+  auto InsertUnique(BPlusTreePage *page, const KeyType &key, const ValueType &value,
                           Transaction *transaction = nullptr) -> bool;
   void SplitLeaf(LeafPage *page);
   void SplitInternal(InternalPage *page);

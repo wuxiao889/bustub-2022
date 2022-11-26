@@ -60,17 +60,28 @@ INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::LoopUp(const KeyType &key, BPlusTreePage *cur_page) -> std::pair<LeafPage *, int> {
   for (;;) {
     if (cur_page->IsLeafPage()) {
-      LeafPage *page = CastLeafPage(cur_page);
-      int idx = page->LowerBound(key, comparator_);
-      if (comparator_(page->KeyAt(idx), key) == 0) {
-        return std::make_pair(page, idx);
+      LeafPage *leaf_page = CastLeafPage(cur_page);
+      int index = leaf_page->LowerBound(key, comparator_);
+      LOG_INFO("lookup int leaf page %d at index %d", cur_page->GetPageId(), index);
+      assert(index < leaf_page->GetSize());
+      if (index < leaf_page->GetSize() && comparator_(leaf_page->KeyAt(index), key) == 0) {
+        LOG_INFO("found");
+        return std::make_pair(leaf_page, index);
       }
+      LOG_INFO("not found");
       break;
     }
-    InternalPage *page = CastInternalPage(cur_page);
-    int idx = page->LowerBound(key, comparator_);
-    cur_page = FetchChild(page, idx - 1);
+    InternalPage *internal_page = CastInternalPage(cur_page);
+    int idx = internal_page->UpperBound(key, comparator_);
+    cur_page = FetchChild(internal_page, idx - 1);
+    // int idx = page->LowerBound(key, comparator_);
+    // if (idx < page->GetSize() && comparator_(page->KeyAt(idx), key) == 0) {
+    //   cur_page = FetchChild(page, idx);
+    // } else {
+    //   cur_page = FetchChild(page, idx - 1);
+    // }
     UnPinPage(cur_page, false);
+    LOG_INFO("lookup to page %d at index %d", cur_page->GetPageId(), idx - 1);
   }
   UnPinPage(cur_page, false);
   return std::make_pair(nullptr, -1);
@@ -95,34 +106,34 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
   } else {
     root_page = FetchPage(root_page_id_);
   }
-  return InsertToPageUnique(root_page, key, value, transaction);
+  return InsertUnique(root_page, key, value, transaction);
 }
 
 INDEX_TEMPLATE_ARGUMENTS
-auto BPLUSTREE_TYPE::InsertToPageUnique(BPlusTreePage *page, const KeyType &key, const ValueType &value,
-                                        Transaction *transaction) -> bool {
+auto BPLUSTREE_TYPE::InsertUnique(BPlusTreePage *page, const KeyType &key, const ValueType &value,
+                                  Transaction *transaction) -> bool {
   if (page->IsLeafPage()) {
     LeafPage *leaf_page = CastLeafPage(page);
     int index = leaf_page->LowerBound(key, comparator_);
-    if (comparator_(leaf_page->KeyAt(index), key) == 0) {
-      LOG_DEBUG("key ununique");
+    if (index < leaf_page->GetSize() && comparator_(leaf_page->KeyAt(index), key) == 0) {
+      LOG_INFO("key ununique");
       UnPinPage(leaf_page, false);
       return false;
     }
     leaf_page->Insert(index, key, value);
-    LOG_DEBUG("insert to leaf page %d at index %d", leaf_page->GetPageId(), index);
+    LOG_INFO("insert to leaf page %d at index %d", leaf_page->GetPageId(), index);
     if (leaf_page->GetSize() == leaf_page->GetMaxSize()) {
       SplitLeaf(leaf_page);
     }
-    UnPinPage(leaf_page, true);
+    UnPinPage(leaf_page, false);
     return true;
   }
   InternalPage *inter_page = CastInternalPage(page);
   int index = inter_page->LowerBound(key, comparator_);
   BPlusTreePage *next_page = FetchChild(inter_page, index - 1);
 
-  LOG_DEBUG("index %d insert go to page %d", index, next_page->GetPageId());
-  bool ok = InsertToPageUnique(next_page, key, value, transaction);
+  LOG_INFO("index %d insert go to page %d", index, next_page->GetPageId());
+  bool ok = InsertUnique(next_page, key, value, transaction);
   if (ok && inter_page->GetSize() == inter_page->GetMaxSize() + 1) {
     SplitInternal(inter_page);
   }
@@ -139,10 +150,14 @@ void BPLUSTREE_TYPE::SplitLeaf(LeafPage *left_page) {
   LeafPage *right_page = NewLeafPage(&right_page_id, left_page->GetParentPageId());
 
   for (int i = x, j = 0; i < leaf_max_size_; i++, j++) {
-    right_page->Insert(j, left_page->KeyAt(i), left_page->ValueAt(i));
+    right_page->SetKeyAt(j, left_page->KeyAt(i));
+    right_page->SetValueAt(j, left_page->ValueAt(i));
+    left_page->SetKeyAt(i, KeyType{});
+    left_page->SetValueAt(i, ValueType{});
   }
 
   left_page->SetSize(x);
+  right_page->SetSize(leaf_max_size_ - x);
   assert(right_page->GetSize() == leaf_max_size_ - x);
 
   if (right_most_ == left_page->GetPageId()) {
@@ -152,16 +167,13 @@ void BPLUSTREE_TYPE::SplitLeaf(LeafPage *left_page) {
   KeyType key = right_page->KeyAt(0);
 
   if (left_page->IsRootPage()) {
-    LOG_DEBUG("leaf page %d split noroot", left_page->GetPageId());
+    LOG_INFO("leaf page %d split noroot", left_page->GetPageId());
     InternalPage *root_page = NewInternalRootPage(&root_page_id_);
     UpdateRootPageId(0);
 
     root_page->Insert(0, KeyType{}, left_page->GetPageId());
     root_page->Insert(1, key, right_page_id);
     assert(root_page->GetSize() == 2);
-    assert(root_page->ValueAt(0) == left_page->GetPageId());
-    assert(root_page->ValueAt(1) == right_page_id);
-
     left_page->SetParentPageId(root_page_id_);
     right_page->SetParentPageId(root_page_id_);
 
@@ -172,7 +184,7 @@ void BPLUSTREE_TYPE::SplitLeaf(LeafPage *left_page) {
     assert(parent_page->GetSize() <= parent_page->GetMaxSize());
     int index = parent_page->LowerBound(key, comparator_);
     parent_page->Insert(index, key, right_page_id);
-    LOG_DEBUG("leaf page %d split parent_page id %d at index %d ", left_page->GetPageId(), parent_page->GetPageId(),
+    LOG_INFO("leaf page %d split parent_page id %d at index %d ", left_page->GetPageId(), parent_page->GetPageId(),
               index);
     right_page->SetNextPageId(left_page->GetNextPageId());
     left_page->SetNextPageId(right_page_id);
@@ -184,7 +196,7 @@ void BPLUSTREE_TYPE::SplitLeaf(LeafPage *left_page) {
 
 INDEX_TEMPLATE_ARGUMENTS
 void BPLUSTREE_TYPE::SplitInternal(InternalPage *left_page) {
-  LOG_DEBUG("internal page %d split", left_page->GetPageId());
+  LOG_INFO("internal page %d split", left_page->GetPageId());
   int x;
   x = (leaf_max_size_ + 1) / 2;
   int right_page_id;
@@ -540,7 +552,6 @@ auto BPLUSTREE_TYPE::FetchParent(BPlusTreePage *page) -> InternalPage * {
   return CastInternalPage(PageToB(buffer_pool_manager_->FetchPage(page->GetParentPageId())));
 }
 
-// auto FetchPageById(page_id_t page_id) -> InternalPage * { return CastInternalPage(FetchPage(page_id)); }
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::FetchChild(InternalPage *page, int index) -> BPlusTreePage * {
   page_id_t page_id = page->ValueAt(index);

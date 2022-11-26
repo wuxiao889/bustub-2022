@@ -135,7 +135,7 @@ TEST(BPlusTreeTests, InsertTest3) {
   auto *disk_manager = new DiskManager("test.db");
   BufferPoolManager *bpm = new BufferPoolManagerInstance(50, disk_manager);
   // create b+ tree
-  BPlusTree<GenericKey<8>, RID, GenericComparator<8>> tree("foo_pk", bpm, comparator);
+  BPlusTree<GenericKey<8>, RID, GenericComparator<8>> tree("foo_pk", bpm, comparator,3,3);
   GenericKey<8> index_key;
   RID rid;
   // create transaction
@@ -154,7 +154,6 @@ TEST(BPlusTreeTests, InsertTest3) {
     index_key.SetFromInteger(key);
     tree.Insert(index_key, rid, transaction);
   }
-
   std::vector<RID> rids;
   for (auto key : keys) {
     rids.clear();

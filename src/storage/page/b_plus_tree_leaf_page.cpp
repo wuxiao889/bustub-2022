@@ -54,17 +54,40 @@ void B_PLUS_TREE_LEAF_PAGE_TYPE::SetNextPageId(page_id_t next_page_id) { next_pa
  * array offset)
  */
 INDEX_TEMPLATE_ARGUMENTS
-auto B_PLUS_TREE_LEAF_PAGE_TYPE::KeyAt(int index) const -> KeyType { return array_[index].first; }
+auto B_PLUS_TREE_LEAF_PAGE_TYPE::KeyAt(int index) const -> KeyType {
+  assert(index < GetSize());
+  return array_[index].first;
+}
 
 INDEX_TEMPLATE_ARGUMENTS
-auto B_PLUS_TREE_LEAF_PAGE_TYPE::ValueAt(int index) const -> ValueType { return array_[index].second; }
+auto B_PLUS_TREE_LEAF_PAGE_TYPE::ValueAt(int index) const -> ValueType {
+  assert(index < GetSize());
+  return array_[index].second;
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+void B_PLUS_TREE_LEAF_PAGE_TYPE::SetKeyAt(int index, const KeyType &key) { array_[index].first = key; }
+
+INDEX_TEMPLATE_ARGUMENTS
+void B_PLUS_TREE_LEAF_PAGE_TYPE::SetValueAt(int index, const ValueType &value) { array_[index].second = value; }
 
 INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_LEAF_PAGE_TYPE::LowerBound(const KeyType &key, const KeyComparator &cmp) -> int {
-  int res = std::lower_bound(array_, array_ + GetSize(), key,
-                             [&](const MappingType &x, const KeyType &key) { return cmp(x.first, key) == -1; }) -
-            array_;
-  return res;
+  // int res = std::lower_bound(array_, array_ + GetSize(), key,
+  //                            [&](const MappingType &x, const KeyType &key) { return cmp(x.first, key) == -1; }) -
+  //           array_;
+  // return res;
+  int left = 0;
+  int right = GetSize();
+  while (left < right) {
+    int mid = (left + right) / 2;
+    if (cmp(array_[mid].first, key) >= 0) {
+      right = mid;
+    } else {
+      left = mid + 1;
+    }
+  }
+  return left;
 }
 
 INDEX_TEMPLATE_ARGUMENTS
