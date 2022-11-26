@@ -92,8 +92,8 @@ void HeaderPage::SetRecordCount(int record_count) { memcpy(GetData(), &record_co
 
 /**
  * @brief 线性查找
- * 
- * @param name 
+ *
+ * @param name
  * @return int  i idx , -1 not found
  */
 auto HeaderPage::FindRecord(const std::string &name) -> int {

@@ -33,6 +33,7 @@ BPLUSTREE_TYPE::BPlusTree(std::string name, BufferPoolManager *buffer_pool_manag
  */
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::IsEmpty() const -> bool { return root_page_id_ == INVALID_PAGE_ID; }
+
 /*****************************************************************************
  * SEARCH
  *****************************************************************************/
@@ -106,12 +107,12 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
   } else {
     root_page = FetchPage(root_page_id_);
   }
-  return InsertUnique(root_page, key, value, transaction);
+  return InsertAux(root_page, key, value, transaction);
 }
 
 INDEX_TEMPLATE_ARGUMENTS
-auto BPLUSTREE_TYPE::InsertUnique(BPlusTreePage *page, const KeyType &key, const ValueType &value,
-                                  Transaction *transaction) -> bool {
+auto BPLUSTREE_TYPE::InsertAux(BPlusTreePage *page, const KeyType &key, const ValueType &value,
+                               Transaction *transaction) -> bool {
   if (page->IsLeafPage()) {
     LeafPage *leaf_page = CastLeafPage(page);
     int index = leaf_page->LowerBound(key, comparator_);
@@ -133,7 +134,7 @@ auto BPLUSTREE_TYPE::InsertUnique(BPlusTreePage *page, const KeyType &key, const
   BPlusTreePage *next_page = FetchChild(inter_page, index - 1);
 
   LOG_INFO("index %d insert go to page %d", index, next_page->GetPageId());
-  bool ok = InsertUnique(next_page, key, value, transaction);
+  bool ok = InsertAux(next_page, key, value, transaction);
   if (ok && inter_page->GetSize() == inter_page->GetMaxSize() + 1) {
     SplitInternal(inter_page);
   }
@@ -173,19 +174,23 @@ void BPLUSTREE_TYPE::SplitLeaf(LeafPage *left_page) {
 
     root_page->Insert(0, KeyType{}, left_page->GetPageId());
     root_page->Insert(1, key, right_page_id);
+
     assert(root_page->GetSize() == 2);
+
     left_page->SetParentPageId(root_page_id_);
     right_page->SetParentPageId(root_page_id_);
 
     left_page->SetNextPageId(right_page_id);
+
     UnPinPage(root_page, true);
+
   } else {
     InternalPage *parent_page = FetchParent(left_page);
     assert(parent_page->GetSize() <= parent_page->GetMaxSize());
     int index = parent_page->LowerBound(key, comparator_);
     parent_page->Insert(index, key, right_page_id);
     LOG_INFO("leaf page %d split parent_page id %d at index %d ", left_page->GetPageId(), parent_page->GetPageId(),
-              index);
+             index);
     right_page->SetNextPageId(left_page->GetNextPageId());
     left_page->SetNextPageId(right_page_id);
     UnPinPage(parent_page, true);
@@ -249,7 +254,232 @@ void BPLUSTREE_TYPE::SplitInternal(InternalPage *left_page) {
  * necessary.
  */
 INDEX_TEMPLATE_ARGUMENTS
-void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {}
+void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
+  if (IsEmpty()) {
+    return;
+  }
+  auto root_page = FetchPage(root_page_id_);
+  RemoveAux(root_page, key, transaction);
+  Draw(buffer_pool_manager_, "Remove" + std::to_string(key.ToString()) + ".dot");
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+void BPLUSTREE_TYPE::RemoveAux(BPlusTreePage *cur_page, const KeyType &key, Transaction *transaction) {
+  if (cur_page->IsLeafPage()) {
+    LeafPage *leaf_page = CastLeafPage(cur_page);
+    int index = leaf_page->LowerBound(key, comparator_);
+    if (index < leaf_page->GetSize() && comparator_(leaf_page->KeyAt(index), key) == 0) {
+      LOG_INFO("in child page %d index %d found", leaf_page->GetPageId(), index);
+      leaf_page->ShiftLeft(index);
+      leaf_page->IncreaseSize(-1);
+    }
+  } else {
+    InternalPage *internal_page = CastInternalPage(cur_page);
+    int index = internal_page->UpperBound(key, comparator_);
+    BPlusTreePage *next_page = FetchChild(internal_page, index - 1);
+    LOG_INFO("go to child page %d index %d", next_page->GetPageId(), index - 1);
+    RemoveAux(next_page, key, transaction);
+  }
+
+  if (cur_page->GetSize() >= cur_page->GetMinSize()) {
+    return;
+  }
+
+  if (cur_page->IsRootPage()) {
+    if (cur_page->IsLeafPage()) {
+      LOG_INFO("is leaf root page");
+      return;
+    }
+    if (cur_page->GetSize() == 1) {
+      LOG_INFO("is internal root page, and only has one child");
+      InternalPage *root_page = CastInternalPage(cur_page);
+      root_page_id_ = root_page->ValueAt(0);
+      UpdateRootPageId();
+      UpdataRoot();
+      UnPinPage(root_page, false);
+      int ok = DeletePage(root_page);
+      assert(ok == true);
+      return;
+    }
+  }
+
+  int cur_pos = CalcPositionInParent(cur_page);
+  LOG_INFO("cur_page %d pos %d in parent", cur_page->GetPageId(), cur_pos);
+
+  if (cur_page->IsLeafPage()) {
+    if (cur_pos == 0) {
+      // LeafPage* right_page = FetchChild(InternalPage *page, int index)
+      LeafPage *right_page = CastLeafPage(FetchSibling(cur_page, cur_pos + 1));
+      assert(right_page != nullptr);
+      assert(right_page->GetSize() >= right_page->GetMinSize());
+      if (right_page->GetSize() > right_page->GetMinSize()) {
+        Redistribute(cur_page, right_page, 0, 0);
+      } else {
+        Merge(cur_page, right_page, cur_pos);
+      }
+    } else {
+      LeafPage *left_page = CastLeafPage(FetchSibling(cur_page, cur_pos - 1));
+      LeafPage *right_page = CastLeafPage(FetchSibling(cur_page, cur_pos + 1));
+      assert(left_page->GetSize() >= left_page->GetMinSize());
+      // assert(right_page->GetSize() >= right_page->GetMinSize());
+
+      if (left_page->GetSize() > left_page->GetMinSize()) {
+        Redistribute(left_page, cur_page, cur_pos - 1, 1);
+      } else if (right_page != nullptr && right_page->GetSize() > right_page->GetMinSize()) {
+        Redistribute(cur_page, right_page, cur_pos, 0);
+      } else {
+        Merge(left_page, cur_page, cur_pos - 1);
+      }
+      // else if (cur_page->GetSize() + left_page->GetSize() < cur_page->GetMaxSize()) {
+      //   Merge();
+      // } else if (right_page != nullptr && cur_page->GetSize() + right_page->GetSize() < cur_page->GetMaxSize()) {
+      //   Merge();
+      // }
+    }
+  } else {
+    if (cur_pos == 0) {
+      InternalPage *right_page = CastInternalPage(FetchSibling(cur_page, cur_pos + 1));
+      assert(right_page != nullptr);
+      assert(right_page->GetSize() >= right_page->GetMinSize());
+
+      if (right_page->GetSize() > right_page->GetMinSize()) {
+        Redistribute(cur_page, right_page, 0, 0);
+      } else {
+        Merge(cur_page, right_page, cur_pos);
+      }
+
+    } else {
+      InternalPage *left_page = CastInternalPage(FetchSibling(cur_page, cur_pos - 1));
+      InternalPage *right_page = CastInternalPage(FetchSibling(cur_page, cur_pos + 1));
+      assert(left_page->GetSize() >= left_page->GetMinSize());
+      // assert(right_page->GetSize() >= right_page->GetMinSize());
+      if (left_page->GetSize() > left_page->GetMinSize()) {
+        Redistribute(left_page, cur_page, cur_pos - 1, 0);
+      } else if (right_page != nullptr && right_page->GetSize() > right_page->GetMinSize()) {
+        Redistribute(cur_page, right_page, cur_pos, 0);
+      } else {
+        Merge(left_page, cur_page, cur_pos - 1);
+      }
+    }
+  }
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+void BPLUSTREE_TYPE::Redistribute(BPlusTreePage *left, BPlusTreePage *right, int posOfLeftPage,
+                                  int whichOneisCurBlock) {
+  LOG_INFO("Redistribute page %d and page %d posofleft %d  %d is cur", left->GetPageId(), right->GetPageId(),
+           posOfLeftPage, whichOneisCurBlock);
+  InternalPage *parent = FetchParent(left);
+  if (left->IsLeafPage()) {
+    LeafPage *leftpage = CastLeafPage(left);
+    LeafPage *rightpage = CastLeafPage(right);
+    // brow from right
+    if (whichOneisCurBlock == 0) {
+      // borrow the first pair from right
+      leftpage->SetKeyAt(leftpage->GetSize(), rightpage->KeyAt(0));
+      leftpage->SetValueAt(leftpage->GetSize(), rightpage->ValueAt(0));
+      leftpage->IncreaseSize(1);
+      // shift left by one in right
+      rightpage->ShiftLeft();
+      rightpage->IncreaseSize(-1);
+      // updade right key in parent
+      parent->SetKeyAt(posOfLeftPage + 1, rightpage->KeyAt(0));
+    } else {
+      // shift right to make space
+      rightpage->ShiftRight();
+      // borrow last fram left
+      rightpage->SetKeyAt(0, leftpage->KeyAt(leftpage->GetSize() - 1));
+      rightpage->SetValueAt(0, leftpage->ValueAt(leftpage->GetSize() - 1));
+      rightpage->IncreaseSize(1);
+      leftpage->IncreaseSize(-1);
+      parent->SetKeyAt(posOfLeftPage + 1, rightpage->KeyAt(0));
+    }
+  } else {
+    InternalPage *leftpage = CastInternalPage(left);
+    InternalPage *rightpage = CastInternalPage(right);
+
+    if (whichOneisCurBlock == 0) {
+      // bring down the right key from parent
+      leftpage->SetKeyAt(leftpage->GetSize(), parent->KeyAt(posOfLeftPage + 1));
+      // bring the first child from right
+      leftpage->SetValueAt(leftpage->GetSize(), rightpage->ValueAt(0));
+      leftpage->IncreaseSize(1);
+      // send up first key of the right to the parent
+      parent->SetKeyAt(posOfLeftPage + 1, rightpage->KeyAt(0));
+      // shift left by one in right
+      rightpage->ShiftLeft();
+      rightpage->IncreaseSize(-1);
+    } else {
+      rightpage->ShiftRight();
+      // bring down the left key from parent
+      rightpage->SetKeyAt(0, parent->KeyAt(posOfLeftPage));
+      // bring the last child from left
+      rightpage->SetValueAt(0, leftpage->ValueAt(leftpage->GetSize() - 1));
+      rightpage->IncreaseSize(1);
+
+      // send up last key of the left to the parent
+      parent->SetKeyAt(posOfLeftPage, leftpage->KeyAt(leftpage->GetSize() - 1));
+      leftpage->IncreaseSize(-1);
+    }
+  }
+  UnPinPage(parent, true);
+  UnPinPage(left, true);
+  UnPinPage(right, true);
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+void BPLUSTREE_TYPE::Merge(BPlusTreePage *left, BPlusTreePage *right, int posOfLeftPage) {
+  LOG_INFO("Merge page %d and page %d posofleft %d", left->GetPageId(), right->GetPageId(), posOfLeftPage);
+  InternalPage *parent = FetchParent(left);
+  if (left->IsLeafPage()) {
+    LeafPage *left_page = CastLeafPage(left);
+    LeafPage *right_page = CastLeafPage(right);
+
+    for (int i = left_page->GetSize(), j = 0; j < right_page->GetSize(); i++, j++) {
+      left_page->SetValueAt(i, right_page->ValueAt(j));
+      left_page->SetKeyAt(i, right_page->KeyAt(j));
+    }
+    left_page->IncreaseSize(right_page->GetSize());
+
+    left_page->SetNextPageId(right_page->GetNextPageId());
+    if (right_page->GetPageId() == right_most_) {
+      right_most_ = left_page->GetPageId();
+    }
+    UnPinPage(right_page, false);
+    bool ok = DeletePage(right_page);
+    assert(ok == true);
+
+  } else {
+    InternalPage *left_page = CastInternalPage(left);
+    InternalPage *right_page = CastInternalPage(right);
+    int old_size = left_page->GetSize();
+
+    left_page->SetKeyAt(left_page->GetSize(), parent->KeyAt(posOfLeftPage + 1));
+    left_page->SetValueAt(left_page->GetSize(), right_page->ValueAt(0));
+    left_page->IncreaseSize(1);
+
+    for (int i = left_page->GetSize(), j = 1; j < right_page->GetSize(); i++, j++) {
+      left_page->SetValueAt(i, right_page->ValueAt(j));
+      left_page->SetKeyAt(i, right_page->KeyAt(j));
+    }
+    left_page->IncreaseSize(right_page->GetSize() - 1);
+
+    for (int i = old_size; i < left_page->GetSize(); i++) {
+      BPlusTreePage *child_page = FetchChild(left_page, i);
+      child_page->SetParentPageId(left_page->GetPageId());
+      UnPinPage(child_page, true);
+    }
+
+    UnPinPage(right_page, false);
+    bool ok = DeletePage(right_page);
+    assert(ok == true);
+  }
+
+  parent->ShiftLeft(posOfLeftPage + 1);
+  parent->IncreaseSize(-1);
+  UnPinPage(left, true);
+  UnPinPage(parent, true);
+}
 
 /*****************************************************************************
  * INDEX ITERATOR
@@ -553,6 +783,18 @@ auto BPLUSTREE_TYPE::FetchParent(BPlusTreePage *page) -> InternalPage * {
 }
 
 INDEX_TEMPLATE_ARGUMENTS
+auto BPLUSTREE_TYPE::FetchSibling(BPlusTreePage *page, int index) -> BPlusTreePage * {
+  InternalPage *parent_page = FetchParent(page);
+  assert(index >= 0 && index <= parent_page->GetSize());
+  if (index == parent_page->GetSize()) {
+    return nullptr;
+  }
+  page_id_t page_id = parent_page->ValueAt(index);
+  UnPinPage(parent_page, false);
+  return FetchPage(page_id);
+}
+
+INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::FetchChild(InternalPage *page, int index) -> BPlusTreePage * {
   page_id_t page_id = page->ValueAt(index);
   BPlusTreePage *res = FetchPage(page_id);
@@ -562,6 +804,32 @@ auto BPLUSTREE_TYPE::FetchChild(InternalPage *page, int index) -> BPlusTreePage 
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::UnPinPage(BPlusTreePage *page, bool is_dirty) const {
   buffer_pool_manager_->UnpinPage(page->GetPageId(), is_dirty);
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+auto BPLUSTREE_TYPE::DeletePage(BPlusTreePage *page) const -> bool {
+  return buffer_pool_manager_->DeletePage(page->GetPageId());
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+auto BPLUSTREE_TYPE::UpdataRoot() {
+  BPlusTreePage *page = FetchPage(root_page_id_);
+  page->SetParentPageId(INVALID_PAGE_ID);
+  UnPinPage(page, true);
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+auto BPLUSTREE_TYPE::CalcPositionInParent(BPlusTreePage *page) -> int {
+  InternalPage *parent_page = FetchParent(page);
+  int position = -1;
+  if (page->IsLeafPage()) {
+    position = parent_page->UpperBound(CastLeafPage(page)->KeyAt(0), comparator_);
+  } else {
+    position = parent_page->UpperBound(CastInternalPage(page)->KeyAt(0), comparator_);
+  }
+  assert(position <= parent_page->GetSize());
+  UnPinPage(parent_page, false);
+  return position - 1;
 }
 
 template class BPlusTree<GenericKey<4>, RID, GenericComparator<4>>;

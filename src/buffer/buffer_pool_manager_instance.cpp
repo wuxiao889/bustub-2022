@@ -16,8 +16,8 @@
 #include <mutex>  // NOLINT
 
 #include "common/config.h"
-#include "common/logger.h"
 #include "common/exception.h"
+#include "common/logger.h"
 #include "common/macros.h"
 #include "storage/page/page.h"
 

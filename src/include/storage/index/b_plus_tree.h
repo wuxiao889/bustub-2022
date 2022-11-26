@@ -82,9 +82,19 @@ class BPlusTree {
 
  private:
   auto LoopUp(const KeyType &key, BPlusTreePage *cur_page) -> std::pair<LeafPage *, int>;
-  auto InsertUnique(BPlusTreePage *page, const KeyType &key, const ValueType &value,
-                          Transaction *transaction = nullptr) -> bool;
+  auto InsertAux(BPlusTreePage *page, const KeyType &key, const ValueType &value, Transaction *transaction = nullptr)
+      -> bool;
+
+  void RemoveAux(BPlusTreePage *page, const KeyType &key, Transaction *transaction = nullptr);
+  void BrowFromLeft();
+  void BrowFrowRight();
+
+  void Redistribute(BPlusTreePage *left_page, BPlusTreePage *right_page, int posOfLeftPage, int whichOneisCurBlock);
+
+  void Merge(BPlusTreePage *leftpage, BPlusTreePage *rightpage, int posOfLeftPage);
+
   void SplitLeaf(LeafPage *page);
+
   void SplitInternal(InternalPage *page);
 
   void UpdateRootPageId(int insert_record = 0);
@@ -108,8 +118,15 @@ class BPlusTree {
   auto FetchChild(InternalPage *page, int index) -> BPlusTreePage *;
 
   auto FetchParent(BPlusTreePage *page) -> InternalPage *;
+  auto FetchSibling(BPlusTreePage *page, int index) -> BPlusTreePage *;
 
   auto UnPinPage(BPlusTreePage *page, bool is_dirty) const;
+
+  auto DeletePage(BPlusTreePage *page) const -> bool;
+
+  auto UpdataRoot();
+
+  auto CalcPositionInParent(BPlusTreePage *page) -> int;
 
   // member variable
   std::string index_name_;

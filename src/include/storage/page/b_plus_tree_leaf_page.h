@@ -49,16 +49,19 @@ class BPlusTreeLeafPage : public BPlusTreePage {
   // helper methods
   auto GetNextPageId() const -> page_id_t;
   void SetNextPageId(page_id_t next_page_id);
-  
+
   auto KeyAt(int index) const -> KeyType;
   auto ValueAt(int index) const -> ValueType;
   void SetKeyAt(int index, const KeyType &key);
   void SetValueAt(int index, const ValueType &value);
 
   void Insert(int index, const KeyType &key, const ValueType &value);
-  auto LowerBound(const KeyType &key, const KeyComparator &cmp) -> int;
+  auto LowerBound(const KeyType &key, const KeyComparator &cmp) const -> int;
 
   auto operator[](int index) -> MappingType & { return array_[index]; }
+
+  void ShiftLeft(int i = 0);
+  void ShiftRight();
 
  private:
   page_id_t next_page_id_;

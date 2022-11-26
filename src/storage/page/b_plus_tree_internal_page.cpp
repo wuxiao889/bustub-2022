@@ -69,10 +69,10 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::SetValueAt(int index, const ValueType &valu
 
 /**
  * @brief find the first element >= key
- * 
- * @param key 
- * @param cmp 
- * @return int 
+ *
+ * @param key
+ * @param cmp
+ * @return int
  */
 INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::LowerBound(const KeyType &key, const KeyComparator &cmp) -> int {
@@ -92,14 +92,12 @@ auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::LowerBound(const KeyType &key, const KeyCom
   return left;
 }
 
+INDEX_TEMPLATE_ARGUMENTS
+void B_PLUS_TREE_INTERNAL_PAGE_TYPE::ShiftLeft(int i) { std::copy(array_ + i + 1, array_ + GetSize(), array_ + i); }
 
-/**
- * @brief find the first element > key
- * 
- * @param key 
- * @param cmp 
- * @return int 
- */
+INDEX_TEMPLATE_ARGUMENTS
+void B_PLUS_TREE_INTERNAL_PAGE_TYPE::ShiftRight() { std::copy(array_, array_ + GetSize(), array_ + 1); }
+
 INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::UpperBound(const KeyType &key, const KeyComparator &cmp) -> int {
   int left = 1;
