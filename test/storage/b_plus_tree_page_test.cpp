@@ -20,7 +20,7 @@ TEST(BPlusTreePageTests, InternalPageTest) {
 
   // x 1 2 3 4 5 6 7 8 9//
   for (int i = 0; i < 10; ++i) {
-    page->Insert(i, i, i);
+    page->InsertAndIncrease(i, i, i);
     EXPECT_EQ(i, page->ValueAt(i));
   }
   EXPECT_EQ(10, page->GetSize());
@@ -33,7 +33,7 @@ TEST(BPlusTreePageTests, InternalPageTest) {
   EXPECT_EQ(10, index);
 
   // x 0 1 2 3 4 5 6 7 8 9//
-  page->Insert(0, -1, -1);
+  page->InsertAndIncrease(0, -1, -1);
   EXPECT_EQ(-1, page->ValueAt(0));
 
   for (int i = 1; i < 11; ++i) {
@@ -57,17 +57,17 @@ TEST(BPlusTreePageTests, LeafPageTest) {
   EXPECT_EQ(0, page->GetSize());
 
   // 0 //
-  page->Insert(page->GetSize(), 0, 0);
+  page->InsertAndIncrease(page->GetSize(), 0, 0);
   EXPECT_EQ(0, page->KeyAt(0));
   EXPECT_EQ(1, page->GetSize());
 
   // 0 1//
-  page->Insert(page->GetSize(), 1, 1);
+  page->InsertAndIncrease(page->GetSize(), 1, 1);
   EXPECT_EQ(1, page->KeyAt(1));
   EXPECT_EQ(2, page->GetSize());
 
   // -1 0 1 //
-  page->Insert(0, -1, -1);
+  page->InsertAndIncrease(0, -1, -1);
   EXPECT_EQ(-1, page->KeyAt(0));
   EXPECT_EQ(0, page->KeyAt(1));
   EXPECT_EQ(1, page->KeyAt(2));
@@ -80,7 +80,7 @@ TEST(BPlusTreePageTests, LeafPageTest) {
   EXPECT_EQ(3, index);
 
   // -1 0 1 4 //
-  page->Insert(index, 4, 4);
+  page->InsertAndIncrease(index, 4, 4);
   EXPECT_EQ(4, page->KeyAt(index));
   EXPECT_EQ(4, page->GetSize());
 

@@ -35,7 +35,7 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::Init(page_id_t page_id, page_id_t parent_id
   SetSize(0);
   SetPageId(page_id);
   SetParentPageId(parent_id);
-  SetMaxSize(max_size > static_cast<int>(INTERNAL_PAGE_SIZE) ? INTERNAL_PAGE_SIZE : max_size);
+  SetMaxSize(max_size > static_cast<int>(INTERNAL_PAGE_SIZE) ? INTERNAL_PAGE_SIZE - 1 : max_size);
   for (int i = 0; i < max_size; i++) {
     SetValueAt(i, INVALID_PAGE_ID);
   }
@@ -47,12 +47,15 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::Init(page_id_t page_id, page_id_t parent_id
  */
 INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::KeyAt(int index) const -> KeyType {
-  assert(index < GetSize());
+  // TODO(wxx): assert(index > 0 && index < GetSize());
   return array_[index].first;
 }
 
 INDEX_TEMPLATE_ARGUMENTS
-void B_PLUS_TREE_INTERNAL_PAGE_TYPE::SetKeyAt(int index, const KeyType &key) { array_[index].first = key; }
+void B_PLUS_TREE_INTERNAL_PAGE_TYPE::SetKeyAt(int index, const KeyType &key) {
+  // assert(index > 0);
+  array_[index].first = key;
+}
 
 /*
  * Helper method to get the value associated with input "index"(a.k.a array
@@ -96,9 +99,8 @@ INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_INTERNAL_PAGE_TYPE::ShiftLeft(int i) { std::copy(array_ + i + 1, array_ + GetSize(), array_ + i); }
 
 INDEX_TEMPLATE_ARGUMENTS
-void B_PLUS_TREE_INTERNAL_PAGE_TYPE::ShiftRight() { 
+void B_PLUS_TREE_INTERNAL_PAGE_TYPE::ShiftRight() {
   std::copy_backward(array_, array_ + GetSize(), array_ + 1 + GetSize());
-  // std::copy(array_, array_ + GetSize(), array_ + 1); 
 }
 
 INDEX_TEMPLATE_ARGUMENTS
@@ -117,7 +119,7 @@ auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::UpperBound(const KeyType &key, const KeyCom
 }
 
 INDEX_TEMPLATE_ARGUMENTS
-auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::Insert(int index, const KeyType &key, const ValueType &value) -> void {
+auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::InsertAndIncrease(int index, const KeyType &key, const ValueType &value) -> void {
   BUSTUB_ASSERT(index <= GetSize(), "index <= GetSize()");
   array_[GetSize()] = MappingType{key, value};
   for (int j = GetSize(); j > index; --j) {

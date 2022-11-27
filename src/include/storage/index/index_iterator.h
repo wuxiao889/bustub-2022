@@ -27,7 +27,7 @@ class IndexIterator {
  public:
   // you may define your own constructor based on your member variables
   IndexIterator();
-  IndexIterator(LeafPage *page, int index, BufferPoolManager *buffer_pool_manager);
+  IndexIterator(LeafPage *page, int position, BufferPoolManager *buffer_pool_manager);
   IndexIterator(const IndexIterator &x);
 
   ~IndexIterator();
@@ -44,10 +44,10 @@ class IndexIterator {
 
  private:
   // add your own private member variables here
-  LeafPage *page_;
-  int position_;
+  LeafPage *page_{};
+  int position_{};
 
-  BufferPoolManager *buffer_pool_manager_;
+  BufferPoolManager *buffer_pool_manager_{};
 };
 
 }  // namespace bustub

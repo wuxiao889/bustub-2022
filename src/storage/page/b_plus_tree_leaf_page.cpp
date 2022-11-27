@@ -75,7 +75,9 @@ INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_LEAF_PAGE_TYPE::ShiftLeft(int i) { std::copy(array_ + i + 1, array_ + GetSize(), array_ + i); }
 
 INDEX_TEMPLATE_ARGUMENTS
-void B_PLUS_TREE_LEAF_PAGE_TYPE::ShiftRight() { std::copy(array_, array_ + GetSize(), array_ + 1); }
+void B_PLUS_TREE_LEAF_PAGE_TYPE::ShiftRight() {
+  std::copy_backward(array_, array_ + GetSize(), array_ + 1 + GetSize());
+}
 
 INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_LEAF_PAGE_TYPE::LowerBound(const KeyType &key, const KeyComparator &cmp) const -> int {
@@ -97,7 +99,7 @@ auto B_PLUS_TREE_LEAF_PAGE_TYPE::LowerBound(const KeyType &key, const KeyCompara
 }
 
 INDEX_TEMPLATE_ARGUMENTS
-void B_PLUS_TREE_LEAF_PAGE_TYPE::Insert(int index, const KeyType &key, const ValueType &value) {
+void B_PLUS_TREE_LEAF_PAGE_TYPE::InsertAndIncrease(int index, const KeyType &key, const ValueType &value) {
   BUSTUB_ASSERT(index <= GetSize(), "index <= GetSize()");
   array_[GetSize()] = MappingType{key, value};
   for (int j = GetSize(); j > index; --j) {

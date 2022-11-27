@@ -44,7 +44,7 @@ class BPlusTreeInternalPage : public BPlusTreePage {
   void SetKeyAt(int index, const KeyType &key);
   void SetValueAt(int index, const ValueType &value);
 
-  auto Insert(int index, const KeyType &key, const ValueType &value) -> void;
+  auto InsertAndIncrease(int index, const KeyType &key, const ValueType &value) -> void;
 
   // @brief find the first element >= key
   auto LowerBound(const KeyType &key, const KeyComparator &cmp) -> int;
