@@ -96,7 +96,10 @@ INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_INTERNAL_PAGE_TYPE::ShiftLeft(int i) { std::copy(array_ + i + 1, array_ + GetSize(), array_ + i); }
 
 INDEX_TEMPLATE_ARGUMENTS
-void B_PLUS_TREE_INTERNAL_PAGE_TYPE::ShiftRight() { std::copy(array_, array_ + GetSize(), array_ + 1); }
+void B_PLUS_TREE_INTERNAL_PAGE_TYPE::ShiftRight() { 
+  std::copy_backward(array_, array_ + GetSize(), array_ + 1 + GetSize());
+  // std::copy(array_, array_ + GetSize(), array_ + 1); 
+}
 
 INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::UpperBound(const KeyType &key, const KeyComparator &cmp) -> int {

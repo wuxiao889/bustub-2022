@@ -103,7 +103,7 @@ class BPlusTree {
 
   void ToString(BPlusTreePage *page, BufferPoolManager *bpm) const;
 
-  auto PageToB(Page *page) -> BPlusTreePage * { return reinterpret_cast<BPlusTreePage *>(page->GetData()); }
+  auto PageToB(Page *page) const -> BPlusTreePage * { return reinterpret_cast<BPlusTreePage *>(page->GetData()); }
   // auto PageToL(Page *page) -> LeafPage * { return reinterpret_cast<LeafPage *>(page->GetData()); }
   // auto PageToI(Page *page) -> InternalPage * { return reinterpret_cast<InternalPage *>(page->GetData()); }
   auto CastLeafPage(BPlusTreePage *page) -> LeafPage * { return static_cast<LeafPage *>(page); }
@@ -114,7 +114,7 @@ class BPlusTree {
   auto NewInternalPage(page_id_t *page_id, page_id_t parent_id) -> InternalPage *;
   auto NewInternalRootPage(page_id_t *page_id) -> InternalPage *;
 
-  auto FetchPage(page_id_t page_id) -> BPlusTreePage *;
+  auto FetchPage(page_id_t page_id) const -> BPlusTreePage *;
   auto FetchChild(InternalPage *page, int index) -> BPlusTreePage *;
 
   auto FetchParent(BPlusTreePage *page) -> InternalPage *;
@@ -137,6 +137,7 @@ class BPlusTree {
   KeyComparator comparator_;
   int leaf_max_size_;
   int internal_max_size_;
+  bool is_empty_;
 
   page_id_t left_most_;
   page_id_t right_most_;

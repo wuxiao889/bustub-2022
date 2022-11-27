@@ -9,7 +9,6 @@
 // Copyright (c) 2015-2022, Carnegie Mellon University Database Group
 //
 //===----------------------------------------------------------------------===//
-
 #include <cstdio>
 #include <iostream>
 
