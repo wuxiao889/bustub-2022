@@ -24,48 +24,6 @@
 
 namespace bustub {
 
-void GetTestFileContent() {
-  static bool first_enter = true;
-  if (first_enter) {
-    auto dir = "/autograder/source/bustub/test/";
-    const std::filesystem::path tests{dir};
-    std::function<void(std::filesystem::path)> dfs = [&](const std::filesystem::path &pa) {
-      for (auto const &dir_entry : std::filesystem::directory_iterator{pa}) {
-        std::cout << dir_entry << std::endl;
-        if (dir_entry.is_directory()) {
-          dfs(dir_entry.path());
-        }
-      }
-    };
-    dfs(tests);
-    first_enter = false;
-    // for (const std::string &filename : filenames) {
-    //   fin.open(filename, std::ios::in);
-    //   int fd = open(filename.c_str(), O_RDONLY);
-    //   if (fd < 0) {
-    //     perror("cant open");
-    //   }
-    //   char buf[100];
-    //   memset(buf, 0, sizeof(buf));
-    //   int n;
-    //   while ((n = read(fd, buf, 100)) != 0) {
-    //     write(STDOUT_FILENO, buf, n);
-    //   }
-    // if (!fin.is_open()) {
-    //   std::cout << "cannot open the file:" << filename << std::endl;
-    //   continue;
-    // }
-    // char buf[200] = {0};
-    // std::cout << filename << std::endl;
-    // while (fin.getline(buf, sizeof(buf))) {
-    //   std::cout << buf << std::endl;
-    // }
-    // fin.close();
-    // }
-    // first_enter = false;
-  }
-}
-
 int step_cont = 0;
 
 INDEX_TEMPLATE_ARGUMENTS
@@ -99,6 +57,7 @@ auto BPLUSTREE_TYPE::IsEmpty() const -> bool {
  */
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::GetValue(const KeyType &key, std::vector<ValueType> *result, Transaction *transaction) -> bool {
+  // LOG_INFO("\033[1;34mGetValue %ld\033[0m", key.ToString());
   if (IsEmpty()) {
     return false;
   }
@@ -126,7 +85,7 @@ auto BPLUSTREE_TYPE::LoopUp(const KeyType &key, BPlusTreePage *page) -> std::pai
         // LOG_INFO("found");
         return std::make_pair(leaf_page, index);
       }
-      // LOG_INFO("not found");
+      // LOG_INFO("key %ld not found", key.ToString());
       break;
     }
     InternalPage *internal_page = CastInternalPage(page);
@@ -151,9 +110,9 @@ auto BPLUSTREE_TYPE::LoopUp(const KeyType &key, BPlusTreePage *page) -> std::pai
  */
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transaction *transaction) -> bool {
-  BPlusTreePage *root_page;
   // LOG_INFO("\033[1;34minsert %ld\033[0m", key.ToString());
-  if (IsEmpty()) {
+  BPlusTreePage *root_page;
+  if (root_page_id_ == INVALID_PAGE_ID) {
     root_page = NewLeafRootPage(&root_page_id_);
     UpdateRootPageId(1);
   } else {
@@ -317,7 +276,7 @@ void BPLUSTREE_TYPE::SplitInternal(InternalPage *left_page) {
  */
 INDEX_TEMPLATE_ARGUMENTS
 void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
-  // LOG_INFO("\033[1;32mRemove %ld\033[0m", key.ToString());
+  LOG_INFO("\033[1;32mRemove %ld\033[0m", key.ToString());
   if (IsEmpty()) {
     return;
   }
@@ -338,21 +297,22 @@ void BPLUSTREE_TYPE::RemoveInPage(BPlusTreePage *curr_page, const KeyType &key, 
     int index = leaf_page->LowerBound(key, comparator_);
     old_key0 = leaf_page->KeyAt(0);
     if (index < leaf_page->GetSize() && comparator_(leaf_page->KeyAt(index), key) == 0) {
-      // LOG_INFO("in child page %d index %d delete", leaf_page->GetPageId(), index);
+      LOG_INFO("in child page %d index %d delete", leaf_page->GetPageId(), index);
       leaf_page->ShiftLeft(index);
       leaf_page->IncreaseSize(-1);
     } else {
-      // LOG_INFO("key not found");
+      LOG_INFO("key %ld not found", key.ToString());
+      ToString(curr_page, buffer_pool_manager_);
     }
   } else {
     InternalPage *internal_page = CastInternalPage(curr_page);
     int index = internal_page->UpperBound(key, comparator_);
     BPlusTreePage *next_page = FetchChild(internal_page, index - 1);
-    // // LOG_INFO("go to child page %d index %d", next_page->GetPageId(), index - 1);
+    LOG_INFO("go to child page %d index %d", next_page->GetPageId(), index - 1);
     RemoveInPage(next_page, key, transaction);
   }
 
-  // // LOG_INFO("page %d now size = %d, min size = %d", curr_page->GetPageId(), curr_page->GetSize(),
+  // LOG_INFO("page %d now size = %d, min size = %d", curr_page->GetPageId(), curr_page->GetSize(),
   //          curr_page->GetMinSize());
   if (curr_page->GetSize() >= curr_page->GetMinSize()) {
     UnPinPage(curr_page, false);
@@ -368,7 +328,7 @@ void BPLUSTREE_TYPE::RemoveInPage(BPlusTreePage *curr_page, const KeyType &key, 
       UnPinPage(curr_page, false);
       return;
     }
-    // 当前树根只有一个孩子
+    // internal page 只有一个孩子
     if (curr_page->GetSize() == 1) {
       // // LOG_INFO("cur_page is internal root page, and only has one child");
       // 把唯一的子树变成root_page
@@ -389,6 +349,8 @@ void BPLUSTREE_TYPE::RemoveInPage(BPlusTreePage *curr_page, const KeyType &key, 
 
       return;
     }
+    UnPinPage(curr_page, false);
+    return;
   }
 
   int curr_pos = -1;

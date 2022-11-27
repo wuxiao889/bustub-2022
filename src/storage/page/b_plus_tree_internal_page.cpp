@@ -35,10 +35,7 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::Init(page_id_t page_id, page_id_t parent_id
   SetSize(0);
   SetPageId(page_id);
   SetParentPageId(parent_id);
-  SetMaxSize(max_size > static_cast<int>(INTERNAL_PAGE_SIZE) ? INTERNAL_PAGE_SIZE - 1 : max_size);
-  for (int i = 0; i < max_size; i++) {
-    SetValueAt(i, INVALID_PAGE_ID);
-  }
+  SetMaxSize(max_size >= static_cast<int>(INTERNAL_PAGE_SIZE) ? INTERNAL_PAGE_SIZE : max_size);
 }
 
 /*
