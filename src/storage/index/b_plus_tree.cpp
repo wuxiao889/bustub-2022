@@ -130,7 +130,6 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
   if (is_empty_ && ok) {
     is_empty_ = false;
   }
-  // buffer_pool_manager_->FlushAllPages();
   return ok;
 }
 
@@ -140,11 +139,13 @@ auto BPLUSTREE_TYPE::InsertInPage(BPlusTreePage *page, const KeyType &key, const
   if (page->IsLeafPage()) {
     LeafPage *leaf_page = CastLeafPage(page);
     int index = leaf_page->LowerBound(key, comparator_);
+    // key不唯一
     if (index < leaf_page->GetSize() && comparator_(leaf_page->KeyAt(index), key) == 0) {
       LOG_INFO("\033[1;31m key %ld insert fail !\033[0m", key.ToString());
       UnPinPage(leaf_page, false);
       return false;
     }
+    // key唯一
     leaf_page->InsertAndIncrease(index, key, value);
     // LOG_INFO("insert to leaf page %d at index %d", leaf_page->GetPageId(), index);
     if (leaf_page->GetSize() == leaf_page->GetMaxSize()) {
@@ -160,10 +161,14 @@ auto BPLUSTREE_TYPE::InsertInPage(BPlusTreePage *page, const KeyType &key, const
   // LOG_INFO("index %d insert go to page %d", index, next_page->GetPageId());
 
   bool ok = InsertInPage(next_page, key, value, transaction);
+
   if (ok && inter_page->GetSize() == inter_page->GetMaxSize() + 1) {
     SplitInternal(inter_page);
+    UnPinPage(inter_page, true);
+  } else {
+    UnPinPage(inter_page, false);
   }
-  UnPinPage(inter_page, false);
+
   return ok;
 }
 
@@ -176,10 +181,6 @@ void BPLUSTREE_TYPE::SplitLeaf(LeafPage *left_page) {
   LeafPage *right_page = NewLeafPage(&right_page_id, left_page->GetParentPageId());
 
   right_page->Copy(left_page, 0, x, left_page->GetMaxSize());
-  // for (int i = x, j = 0; i < left_page->GetMaxSize(); i++, j++) {
-  //   right_page->SetKeyAt(j, left_page->KeyAt(i));
-  //   right_page->SetValueAt(j, left_page->ValueAt(i));
-  // }
 
   left_page->SetSize(x);
   right_page->SetSize(left_page->GetMaxSize() - x);
@@ -237,11 +238,6 @@ void BPLUSTREE_TYPE::SplitInternal(InternalPage *left_page) {
 
   right_page->Copy(left_page, 0, x, left_page->GetSize());
 
-  // for (int i = x, j = 0; i <= internal_max_size_; i++, j++) {
-  //   right_page->SetKeyAt(j, left_page->KeyAt(i));
-  //   right_page->SetValueAt(j, left_page->ValueAt(i));
-  // }
-
   left_page->SetSize(x);
   right_page->SetSize(internal_max_size_ - x + 1);
 
@@ -273,7 +269,7 @@ void BPLUSTREE_TYPE::SplitInternal(InternalPage *left_page) {
     parent_page->InsertAndIncrease(index, key, right_page_id);
     UnPinPage(parent_page, true);
   }
-  UnPinPage(left_page, true);
+  // UnPinPage(left_page, true);
   UnPinPage(right_page, true);
 }
 
@@ -305,16 +301,20 @@ INDEX_TEMPLATE_ARGUMENTS
 void BPLUSTREE_TYPE::RemoveInPage(BPlusTreePage *curr_page, const KeyType &key, Transaction *transaction) {
   // 防止 minSize = 1时只有一个元素删除后无法计算坐标
   KeyType old_key0{};
+
   if (curr_page->IsLeafPage()) {
     LeafPage *leaf_page = CastLeafPage(curr_page);
-    int index = leaf_page->LowerBound(key, comparator_);
+
     old_key0 = leaf_page->KeyAt(0);
+    int index = leaf_page->LowerBound(key, comparator_);
+
     if (index < leaf_page->GetSize() && comparator_(leaf_page->KeyAt(index), key) == 0) {
       // LOG_INFO("in child page %d index %d delete", leaf_page->GetPageId(), index);
       leaf_page->ShiftLeft(index);
       leaf_page->IncreaseSize(-1);
       tot--;
     } else {
+
       LOG_INFO("\033[1;31m key %ld not found \033[0m", key.ToString());
       ToString(curr_page, buffer_pool_manager_);
     }
@@ -360,7 +360,6 @@ void BPLUSTREE_TYPE::RemoveInPage(BPlusTreePage *curr_page, const KeyType &key, 
       UnPinPage(root_page, false);
       bool deleted = DeletePage(root_page);
       assert(deleted == true);
-
       return;
     }
     UnPinPage(curr_page, false);

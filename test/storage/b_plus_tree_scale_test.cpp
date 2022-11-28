@@ -31,7 +31,7 @@ TEST(BPlusTreeTests, InsertTest1) {
   auto *disk_manager = new DiskManager("test.db");
   BufferPoolManager *bpm = new BufferPoolManagerInstance(50, disk_manager);
   // create b+ tree
-  BPlusTree<GenericKey<8>, RID, GenericComparator<8>> tree("foo_pk", bpm, comparator, 3, 3);
+  BPlusTree<GenericKey<8>, RID, GenericComparator<8>> tree("foo_pk", bpm, comparator, 4, 4);
   GenericKey<8> index_key;
   RID rid;
   // create transaction
@@ -42,7 +42,7 @@ TEST(BPlusTreeTests, InsertTest1) {
   auto header_page = bpm->NewPage(&page_id);
   (void)header_page;
 
-  int size = 5000;
+  int size = 50;
   std::vector<int64_t> keys(size);
   std::iota(keys.begin(), keys.end(), 1);
   std::random_device rd;
@@ -59,6 +59,9 @@ TEST(BPlusTreeTests, InsertTest1) {
   tree.Draw(bpm, "/home/wxx/bustub-private/build-vscode/bin/ScaleTest_" + std::to_string(size) + ".dot");
 
   std::vector<RID> rids;
+
+  std::shuffle(keys.begin(), keys.end(), g);
+
   for (auto key : keys) {
     rids.clear();
     index_key.SetFromInteger(key);
@@ -69,7 +72,18 @@ TEST(BPlusTreeTests, InsertTest1) {
     EXPECT_EQ(rids[0].GetSlotNum(), value);
   }
 
+  std::shuffle(keys.begin(), keys.end(), g);
+  
+  for (auto key : keys) {
+    index_key.SetFromInteger(key);
+    tree.Remove(index_key, transaction);
+  }
+  
+  EXPECT_EQ(true, tree.IsEmpty());
+  
+  tree.Draw(bpm, "/home/wxx/bustub-private/build-vscode/bin/ScaleTest_after_remove" + std::to_string(size) + ".dot");
   bpm->UnpinPage(HEADER_PAGE_ID, true);
+
   delete transaction;
   delete disk_manager;
   delete bpm;
