@@ -42,7 +42,7 @@ TEST(BPlusTreeTests, InsertTest1) {
   auto header_page = bpm->NewPage(&page_id);
   (void)header_page;
 
-  int size = 50;
+  int size = 5000;
   std::vector<int64_t> keys(size);
   std::iota(keys.begin(), keys.end(), 1);
   std::random_device rd;

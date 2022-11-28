@@ -133,6 +133,7 @@ auto BufferPoolManagerInstance::UnpinPgImp(page_id_t page_id, bool is_dirty) -> 
   frame_id_t frame_id = -1;
   // If page_id is not in the buffer pool
   if (!page_table_->Find(page_id, frame_id)) {
+    assert(false && "cant found");
     return false;
   }
   Page *page = pages_ + frame_id;
@@ -160,6 +161,7 @@ auto BufferPoolManagerInstance::FlushPgImp(page_id_t page_id) -> bool {
   frame_id_t frame_id = -1;
   // false if the page could not be found in the page table
   if (!page_table_->Find(page_id, frame_id)) {
+    assert(false && "cant found");
     return false;
   }
   Page *page = pages_ + frame_id;

@@ -130,6 +130,7 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
   if (is_empty_ && ok) {
     is_empty_ = false;
   }
+  // buffer_pool_manager_->FlushAllPages();
   return ok;
 }
 
@@ -145,12 +146,11 @@ auto BPLUSTREE_TYPE::InsertInPage(BPlusTreePage *page, const KeyType &key, const
       return false;
     }
     leaf_page->InsertAndIncrease(index, key, value);
-    tot++;
     // LOG_INFO("insert to leaf page %d at index %d", leaf_page->GetPageId(), index);
     if (leaf_page->GetSize() == leaf_page->GetMaxSize()) {
       SplitLeaf(leaf_page);
     }
-    UnPinPage(leaf_page, false);
+    UnPinPage(leaf_page, true);
     return true;
   }
 
@@ -164,7 +164,6 @@ auto BPLUSTREE_TYPE::InsertInPage(BPlusTreePage *page, const KeyType &key, const
     SplitInternal(inter_page);
   }
   UnPinPage(inter_page, false);
-
   return ok;
 }
 
@@ -222,7 +221,7 @@ void BPLUSTREE_TYPE::SplitLeaf(LeafPage *left_page) {
     left_page->SetNextPageId(right_page_id);
     UnPinPage(parent_page, true);
   }
-  UnPinPage(left_page, true);
+  // UnPinPage(left_page, true);
   UnPinPage(right_page, true);
 }
 
