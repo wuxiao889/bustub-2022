@@ -88,7 +88,8 @@ auto BPLUSTREE_TYPE::LoopUp(const KeyType &key, BPlusTreePage *page) -> std::pai
         // LOG_INFO("found");
         return std::make_pair(leaf_page, index);
       }
-      // LOG_INFO("key %ld not found", key.ToString());
+      LOG_INFO("\033[1;31m key %ld not found leaf page %d at index %d \033[0m", key.ToString(), page->GetPageId(),
+               index);
       break;
     }
     InternalPage *internal_page = CastInternalPage(page);
