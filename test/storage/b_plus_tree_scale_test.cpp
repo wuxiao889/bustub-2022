@@ -31,7 +31,7 @@ TEST(BPlusTreeTests, InsertTest1) {
   auto *disk_manager = new DiskManager("test.db");
   BufferPoolManager *bpm = new BufferPoolManagerInstance(50, disk_manager);
   // create b+ tree
-  BPlusTree<GenericKey<8>, RID, GenericComparator<8>> tree("foo_pk", bpm, comparator,4,4);
+  BPlusTree<GenericKey<8>, RID, GenericComparator<8>> tree("foo_pk", bpm, comparator, 4, 4);
   GenericKey<8> index_key;
   RID rid;
   // create transaction
@@ -43,7 +43,7 @@ TEST(BPlusTreeTests, InsertTest1) {
   (void)header_page;
 
   // TODO(wxx)  修改这里测试
-  int size = 5000;
+  int size = 1000;
 
   std::vector<int64_t> keys(size);
 
@@ -62,17 +62,17 @@ TEST(BPlusTreeTests, InsertTest1) {
 
   std::vector<RID> rids;
 
-  // std::shuffle(keys.begin(), keys.end(), g);
+  std::shuffle(keys.begin(), keys.end(), g);
 
-  // for (auto key : keys) {
-  //   rids.clear();
-  //   index_key.SetFromInteger(key);
-  //   tree.GetValue(index_key, &rids);
-  //   EXPECT_EQ(rids.size(), 1);
+  for (auto key : keys) {
+    rids.clear();
+    index_key.SetFromInteger(key);
+    tree.GetValue(index_key, &rids);
+    EXPECT_EQ(rids.size(), 1);
 
-  //   int64_t value = key & 0xFFFFFFFF;
-  //   EXPECT_EQ(rids[0].GetSlotNum(), value);
-  // }
+    int64_t value = key & 0xFFFFFFFF;
+    EXPECT_EQ(rids[0].GetSlotNum(), value);
+  }
 
   std::shuffle(keys.begin(), keys.end(), g);
 
@@ -80,9 +80,9 @@ TEST(BPlusTreeTests, InsertTest1) {
     index_key.SetFromInteger(key);
     tree.Remove(index_key, transaction);
   }
-  
+
   EXPECT_EQ(true, tree.IsEmpty());
-  
+
   bpm->UnpinPage(HEADER_PAGE_ID, true);
 
   delete transaction;
@@ -100,7 +100,7 @@ TEST(BPlusTreeTests, InsertTest2) {
   auto *disk_manager = new DiskManager("test.db");
   BufferPoolManager *bpm = new BufferPoolManagerInstance(50, disk_manager);
   // create b+ tree
-  BPlusTree<GenericKey<8>, RID, GenericComparator<8>> tree("foo_pk", bpm, comparator,7,7);
+  BPlusTree<GenericKey<8>, RID, GenericComparator<8>> tree("foo_pk", bpm, comparator, 7, 7);
   GenericKey<8> index_key;
   RID rid;
   // create transaction
@@ -112,7 +112,7 @@ TEST(BPlusTreeTests, InsertTest2) {
   (void)header_page;
 
   // TODO(wxx)  修改这里测试
-  int size = 5000;
+  int size = 10000;
 
   std::vector<int64_t> keys(size);
 
@@ -149,9 +149,9 @@ TEST(BPlusTreeTests, InsertTest2) {
     index_key.SetFromInteger(key);
     tree.Remove(index_key, transaction);
   }
-  
+
   EXPECT_EQ(true, tree.IsEmpty());
-  
+
   bpm->UnpinPage(HEADER_PAGE_ID, true);
 
   delete transaction;
@@ -181,7 +181,7 @@ TEST(BPlusTreeTests, InsertTest3) {
   (void)header_page;
 
   // TODO(wxx)  修改这里测试
-  int size = 500;
+  int size = 100000;
 
   std::vector<int64_t> keys(size);
 
@@ -200,17 +200,17 @@ TEST(BPlusTreeTests, InsertTest3) {
 
   std::vector<RID> rids;
 
-  // std::shuffle(keys.begin(), keys.end(), g);
+  std::shuffle(keys.begin(), keys.end(), g);
 
-  // for (auto key : keys) {
-  //   rids.clear();
-  //   index_key.SetFromInteger(key);
-  //   tree.GetValue(index_key, &rids);
-  //   EXPECT_EQ(rids.size(), 1);
+  for (auto key : keys) {
+    rids.clear();
+    index_key.SetFromInteger(key);
+    tree.GetValue(index_key, &rids);
+    EXPECT_EQ(rids.size(), 1);
 
-  //   int64_t value = key & 0xFFFFFFFF;
-  //   EXPECT_EQ(rids[0].GetSlotNum(), value);
-  // }
+    int64_t value = key & 0xFFFFFFFF;
+    EXPECT_EQ(rids[0].GetSlotNum(), value);
+  }
 
   std::shuffle(keys.begin(), keys.end(), g);
 
@@ -218,9 +218,9 @@ TEST(BPlusTreeTests, InsertTest3) {
     index_key.SetFromInteger(key);
     tree.Remove(index_key, transaction);
   }
-  
+
   EXPECT_EQ(true, tree.IsEmpty());
-  
+
   bpm->UnpinPage(HEADER_PAGE_ID, true);
 
   delete transaction;

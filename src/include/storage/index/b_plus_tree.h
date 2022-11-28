@@ -127,6 +127,8 @@ class BPlusTree {
 
   auto CalcPositionInParent(BPlusTreePage *page, const KeyType &key, bool useKey) -> int;
 
+  void InsertInParent(BPlusTreePage *left_page, BPlusTreePage *right_page, const KeyType &key, page_id_t value);
+
   void CheckPinCount();
 
   // member variable

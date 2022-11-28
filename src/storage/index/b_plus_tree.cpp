@@ -1,12 +1,8 @@
 #include "storage/index/b_plus_tree.h"
-#include <bits/types/FILE.h>
-#include <fcntl.h>
-#include <unistd.h>
+#include <algorithm>
 #include <cassert>
 #include <cstdio>
 #include <cstring>
-#include <filesystem>
-#include <functional>
 #include <iostream>
 #include <memory>
 #include <string>
@@ -25,6 +21,14 @@
 #include "storage/page/header_page.h"
 
 namespace bustub {
+
+struct DefaultDeletor {
+  void operator()(void *p) {}
+};
+
+struct DirtyDeletor {
+  void operator()(void *p) {}
+};
 
 int step_cont = 0;
 int tot = 0;
@@ -60,7 +64,7 @@ auto BPLUSTREE_TYPE::IsEmpty() const -> bool {
  */
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::GetValue(const KeyType &key, std::vector<ValueType> *result, Transaction *transaction) -> bool {
-  LOG_INFO("\033[1;34mGetValue %ld\033[0m", key.ToString());
+  // LOG_INFO("\033[1;34mGetValue %ld\033[0m", key.ToString());
   if (IsEmpty()) {
     return false;
   }
@@ -121,8 +125,8 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
     root_page = FetchPage(root_page_id_);
   }
   bool ok = InsertInPage(root_page, key, value, transaction);
-  // char buf[50];
-  // std::sprintf(buf, "step%d_insert%ld.dot", ++step_cont, key.ToString());
+  // char buf[100];
+  // std::sprintf(buf, "/home/wxx/bustub-private/build-vscode/bin/step%d_insert%ld.dot", ++step_cont, key.ToString());
   // Draw(buffer_pool_manager_, buf);
   buffer_pool_manager_->CheckPinCount();
   if (is_empty_ && ok) {
@@ -160,12 +164,14 @@ auto BPLUSTREE_TYPE::InsertInPage(BPlusTreePage *page, const KeyType &key, const
 
   bool ok = InsertInPage(next_page, key, value, transaction);
 
-  if (ok && inter_page->GetSize() == inter_page->GetMaxSize() + 1) {
-    SplitInternal(inter_page);
-    UnPinPage(inter_page, true);
-  } else {
-    UnPinPage(inter_page, false);
-  }
+  UnPinPage(inter_page, false);
+
+  // if (ok && inter_page->GetSize() == inter_page->GetMaxSize() + 1) {
+  //   SplitInternal(inter_page);
+  //   UnPinPage(inter_page, true);
+  // } else {
+  //   UnPinPage(inter_page, false);
+  // }
 
   return ok;
 }
@@ -189,6 +195,47 @@ void BPLUSTREE_TYPE::SplitLeaf(LeafPage *left_page) {
 
   KeyType key = right_page->KeyAt(0);
 
+  InsertInParent(left_page, right_page, key, right_page_id);
+
+  // if (left_page->IsRootPage()) {
+  //   // LOG_INFO("leaf page %d split noroot", left_page->GetPageId());
+  //   InternalPage *root_page = NewInternalRootPage(&root_page_id_);
+  //   UpdateRootPageId(0);
+
+  //   root_page->SetValueAt(0, left_page->GetPageId());
+
+  //   root_page->SetKeyAt(1, key);
+  //   root_page->SetValueAt(1, right_page_id);
+  //   root_page->SetSize(2);
+
+  //   left_page->SetParentPageId(root_page_id_);
+  //   right_page->SetParentPageId(root_page_id_);
+
+  //   left_page->SetNextPageId(right_page_id);
+
+  //   UnPinPage(root_page, true);
+
+  // } else {
+  //   InternalPage *parent_page = FetchParent(left_page);
+  //   assert(parent_page->GetSize() <= parent_page->GetMaxSize());
+
+  //   int index = parent_page->LowerBound(key, comparator_);
+  //   assert(index > 0);
+  //   parent_page->InsertAndIncrease(index, key, right_page_id);
+  //   // LOG_INFO("leaf page %d split parent_page id %d at index %d ", left_page->GetPageId(),
+  //   parent_page->GetPageId(),
+  //   //  index);
+  //   right_page->SetNextPageId(left_page->GetNextPageId());
+  //   left_page->SetNextPageId(right_page_id);
+  //   UnPinPage(parent_page, true);
+  // }
+  // UnPinPage(left_page, true);
+  // UnPinPage(right_page, true);
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+void BPLUSTREE_TYPE::InsertInParent(BPlusTreePage *left_page, BPlusTreePage *right_page, const KeyType &key,
+                                    page_id_t value) {
   if (left_page->IsRootPage()) {
     // LOG_INFO("leaf page %d split noroot", left_page->GetPageId());
     InternalPage *root_page = NewInternalRootPage(&root_page_id_);
@@ -197,31 +244,77 @@ void BPLUSTREE_TYPE::SplitLeaf(LeafPage *left_page) {
     root_page->SetValueAt(0, left_page->GetPageId());
 
     root_page->SetKeyAt(1, key);
-    root_page->SetValueAt(1, right_page_id);
+    root_page->SetValueAt(1, right_page->GetPageId());
     root_page->SetSize(2);
 
     left_page->SetParentPageId(root_page_id_);
     right_page->SetParentPageId(root_page_id_);
 
-    left_page->SetNextPageId(right_page_id);
+    if (left_page->IsLeafPage()) {
+      auto leafpage = CastLeafPage(left_page);
+      leafpage->SetNextPageId(right_page->GetPageId());
+    }
 
     UnPinPage(root_page, true);
-
+    UnPinPage(left_page, true);
+    UnPinPage(right_page, true);
   } else {
     InternalPage *parent_page = FetchParent(left_page);
     assert(parent_page->GetSize() <= parent_page->GetMaxSize());
 
-    int index = parent_page->LowerBound(key, comparator_);
-    assert(index > 0);
-    parent_page->InsertAndIncrease(index, key, right_page_id);
-    // LOG_INFO("leaf page %d split parent_page id %d at index %d ", left_page->GetPageId(), parent_page->GetPageId(),
-    //  index);
-    right_page->SetNextPageId(left_page->GetNextPageId());
-    left_page->SetNextPageId(right_page_id);
-    UnPinPage(parent_page, true);
+    if (left_page->IsLeafPage()) {
+      auto leafpage = CastLeafPage(left_page);
+      auto rightpage = CastLeafPage(right_page);
+      rightpage->SetNextPageId(leafpage->GetNextPageId());
+      leafpage->SetNextPageId(right_page->GetPageId());
+    }
+
+    if (parent_page->GetSize() < parent_page->GetMaxSize()) {
+      int index = parent_page->LowerBound(key, comparator_);
+      assert(index > 0);
+      parent_page->InsertAndIncrease(index, key, right_page->GetPageId());
+      // LOG_INFO("leaf page %d split parent_page id %d at index %d ", left_page->GetPageId(), parent_page->GetPageId(),
+      //  index);
+
+      UnPinPage(parent_page, true);
+      UnPinPage(left_page, true);
+      UnPinPage(right_page, true);
+    } else {
+      // split Internal
+      auto vec = parent_page->DumpAll();
+
+      int index = std::lower_bound(vec.begin() + 1, vec.end(), key,
+                                   [&](const std::pair<KeyType, page_id_t> &l, const KeyType &r) {
+                                     return comparator_(l.first, r) < 0;
+                                   }) -
+                  vec.begin();
+      vec.insert(vec.begin() + index, {key, right_page->GetPageId()});
+
+      int parent_right_page_id;
+      InternalPage *parent_right_page = NewInternalPage(&parent_right_page_id, parent_page->GetParentPageId());
+
+      int x = parent_page->GetMinSize();
+      parent_page->Copy(vec, 0, 0, x);
+      parent_right_page->Copy(vec, 0, x, vec.size());
+
+      parent_page->SetSize(x);
+      parent_right_page->SetSize(vec.size() - x);
+      assert(parent_right_page->GetSize() == internal_max_size_ - x + 1);
+
+      for (int i = 0; i < parent_right_page->GetSize(); i++) {
+        BPlusTreePage *child_page = FetchChild(parent_right_page, i);
+        child_page->SetParentPageId(parent_right_page_id);
+        UnPinPage(child_page, true);
+      }
+
+      KeyType key0 = parent_right_page->KeyAt(0);
+      parent_right_page->SetKeyAt(0, KeyType{});
+
+      UnPinPage(left_page, true);
+      UnPinPage(right_page, true);
+      InsertInParent(parent_page, parent_right_page, key0, parent_right_page->GetPageId());
+    }
   }
-  // UnPinPage(left_page, true);
-  UnPinPage(right_page, true);
 }
 
 INDEX_TEMPLATE_ARGUMENTS
@@ -311,6 +404,7 @@ void BPLUSTREE_TYPE::RemoveInPage(BPlusTreePage *curr_page, const KeyType &key, 
       // LOG_INFO("in child page %d index %d delete", leaf_page->GetPageId(), index);
       leaf_page->ShiftLeft(index);
       leaf_page->IncreaseSize(-1);
+      // TODO(wxx) 怎么避免手动刷脏
       buffer_pool_manager_->FlushPage(leaf_page->GetPageId());
       // UnPinPage(leaf_page, true);  // 不能unpin 还在使用
     } else {

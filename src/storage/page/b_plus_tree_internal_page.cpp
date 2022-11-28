@@ -19,6 +19,7 @@
 #include "common/macros.h"
 #include "storage/page/b_plus_tree_internal_page.h"
 #include "storage/page/b_plus_tree_page.h"
+#include "storage/page/hash_table_page_defs.h"
 
 namespace bustub {
 /*****************************************************************************
@@ -103,6 +104,18 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::ShiftRight() {
 INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_INTERNAL_PAGE_TYPE::Copy(const BPlusTreeInternalPage *src, int result, int first, int last) {
   std::copy(src->array_ + first, src->array_ + last, array_ + result);
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+void B_PLUS_TREE_INTERNAL_PAGE_TYPE::Copy(const std::vector<MappingType> &src, int result, int first, int last) {
+  std::copy(src.data() + first, src.data() + last, array_ + result);
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::DumpAll() -> std::vector<MappingType> {
+  std::vector<MappingType> res(array_, array_ + GetMaxSize());
+  res.reserve(GetMaxSize() + 1);
+  return res;
 }
 
 INDEX_TEMPLATE_ARGUMENTS
