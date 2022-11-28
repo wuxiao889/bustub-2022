@@ -337,7 +337,7 @@ void BPLUSTREE_TYPE::RemoveInPage(BPlusTreePage *curr_page, const KeyType &key, 
       // LOG_INFO("cur_page only have one leaf root page");
       if (curr_page->GetSize() == 0) {
         is_empty_ = true;
-        LOG_INFO("is_empty_ = true;");
+        // LOG_INFO("is_empty_ = true;");
       }
       UnPinPage(curr_page, false);
       return;
@@ -808,7 +808,6 @@ auto BPLUSTREE_TYPE::NewLeafPage(page_id_t *page_id, page_id_t parent_id) -> Lea
 
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::NewLeafRootPage(page_id_t *page_id) -> LeafPage * {
-  LOG_INFO("%ld %ld %ld", LEAF_PAGE_SIZE, INTERNAL_PAGE_SIZE, sizeof(MappingType));
   LeafPage *p = CastLeafPage(PageToB(buffer_pool_manager_->NewPage(page_id)));
   p->Init(*page_id, INVALID_PAGE_ID, leaf_max_size_);
   left_most_ = *page_id;
