@@ -60,7 +60,7 @@ auto BPLUSTREE_TYPE::IsEmpty() const -> bool {
  */
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::GetValue(const KeyType &key, std::vector<ValueType> *result, Transaction *transaction) -> bool {
-  // LOG_INFO("\033[1;34mGetValue %ld\033[0m", key.ToString());
+  LOG_INFO("\033[1;34mGetValue %ld\033[0m", key.ToString());
   if (IsEmpty()) {
     return false;
   }
@@ -69,37 +69,35 @@ auto BPLUSTREE_TYPE::GetValue(const KeyType &key, std::vector<ValueType> *result
   if (leaf_page != nullptr) {
     result->emplace_back(leaf_page->ValueAt(index));
     UnPinPage(leaf_page, false);
-    // buffer_pool_manager_->CheckPinCount();
+    buffer_pool_manager_->CheckPinCount();
     return true;
   }
-  // buffer_pool_manager_->CheckPinCount();
+  buffer_pool_manager_->CheckPinCount();
   return false;
 }
 
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::LoopUp(const KeyType &key, BPlusTreePage *page) -> std::pair<LeafPage *, int> {
-  for (;;) {
-    if (page->IsLeafPage()) {
-      LeafPage *leaf_page = CastLeafPage(page);
-      int index = leaf_page->LowerBound(key, comparator_);
-      // LOG_INFO("lookup int leaf page %d at index %d", page->GetPageId(), index);
-      assert(index <= leaf_page->GetSize());
-      if (index < leaf_page->GetSize() && comparator_(leaf_page->KeyAt(index), key) == 0) {
-        // LOG_INFO("found");
-        return std::make_pair(leaf_page, index);
-      }
-      LOG_INFO("\033[1;31m key %ld not found leaf page %d at index %d \033[0m", key.ToString(), page->GetPageId(),
-               index);
-      break;
+  if (page->IsLeafPage()) {
+    LeafPage *leaf_page = CastLeafPage(page);
+    int index = leaf_page->LowerBound(key, comparator_);
+    // LOG_INFO("lookup int leaf page %d at index %d", page->GetPageId(), index);
+    assert(index <= leaf_page->GetSize());
+    if (index < leaf_page->GetSize() && comparator_(leaf_page->KeyAt(index), key) == 0) {
+      // LOG_INFO("found");
+      return std::make_pair(leaf_page, index);
     }
-    InternalPage *internal_page = CastInternalPage(page);
-    int idx = internal_page->UpperBound(key, comparator_);
-    page = FetchChild(internal_page, idx - 1);
+    LOG_INFO("\033[1;31m key %ld not found leaf page %d at index %d \033[0m", key.ToString(), page->GetPageId(), index);
     UnPinPage(page, false);
-    // LOG_INFO("lookup to page %d at index %d", page->GetPageId(), idx - 1);
+    return std::make_pair(nullptr, -1);
   }
+
+  InternalPage *internal_page = CastInternalPage(page);
+  int idx = internal_page->UpperBound(key, comparator_);
+  BPlusTreePage *next_page = FetchChild(internal_page, idx - 1);
   UnPinPage(page, false);
-  return std::make_pair(nullptr, -1);
+  // LOG_INFO("lookup to page %d at index %d", page->GetPageId(), idx - 1);
+  return LoopUp(key, next_page);
 }
 
 /*****************************************************************************
@@ -126,7 +124,7 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
   // char buf[50];
   // std::sprintf(buf, "step%d_insert%ld.dot", ++step_cont, key.ToString());
   // Draw(buffer_pool_manager_, buf);
-  // buffer_pool_manager_->CheckPinCount();
+  buffer_pool_manager_->CheckPinCount();
   if (is_empty_ && ok) {
     is_empty_ = false;
   }
@@ -285,7 +283,7 @@ void BPLUSTREE_TYPE::SplitInternal(InternalPage *left_page) {
  */
 INDEX_TEMPLATE_ARGUMENTS
 void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
-  LOG_INFO("\033[1;32mRemove %ld\033[0m", key.ToString());
+  // LOG_INFO("\033[1;32mRemove %ld\033[0m", key.ToString());
   if (IsEmpty()) {
     return;
   }
@@ -294,7 +292,8 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
   // char buf[50];
   // std::sprintf(buf, "step%d_remove%ld.dot", ++step_cont, key.ToString());
   // Draw(buffer_pool_manager_, buf);
-  // buffer_pool_manager_->CheckPinCount();
+  buffer_pool_manager_->CheckPinCount();
+  // buffer_pool_manager_->FlushAllPages();
 }
 
 INDEX_TEMPLATE_ARGUMENTS
@@ -312,12 +311,12 @@ void BPLUSTREE_TYPE::RemoveInPage(BPlusTreePage *curr_page, const KeyType &key, 
       // LOG_INFO("in child page %d index %d delete", leaf_page->GetPageId(), index);
       leaf_page->ShiftLeft(index);
       leaf_page->IncreaseSize(-1);
-      tot--;
+      buffer_pool_manager_->FlushPage(leaf_page->GetPageId());
+      // UnPinPage(leaf_page, true);  // 不能unpin 还在使用
     } else {
-
       LOG_INFO("\033[1;31m key %ld not found \033[0m", key.ToString());
-      ToString(curr_page, buffer_pool_manager_);
     }
+
   } else {
     InternalPage *internal_page = CastInternalPage(curr_page);
     int index = internal_page->UpperBound(key, comparator_);
@@ -335,19 +334,20 @@ void BPLUSTREE_TYPE::RemoveInPage(BPlusTreePage *curr_page, const KeyType &key, 
 
   if (curr_page->IsRootPage()) {
     if (curr_page->IsLeafPage()) {
-      // // LOG_INFO("cur_page only have one leaf root page");
+      // LOG_INFO("cur_page only have one leaf root page");
       if (curr_page->GetSize() == 0) {
         is_empty_ = true;
+        LOG_INFO("is_empty_ = true;");
       }
       UnPinPage(curr_page, false);
       return;
     }
     // internal page 只有一个孩子
     if (curr_page->GetSize() == 1) {
-      // // LOG_INFO("cur_page is internal root page, and only has one child");
+      // LOG_INFO("cur_page is internal root page, and only has one child");
       // 把唯一的子树变成root_page
-      InternalPage *root_page = CastInternalPage(curr_page);
-      root_page_id_ = root_page->ValueAt(0);
+      InternalPage *old_root_page = CastInternalPage(curr_page);
+      root_page_id_ = old_root_page->ValueAt(0);
       UpdateRootPageId();
 
       // 更新新root_page
@@ -357,11 +357,12 @@ void BPLUSTREE_TYPE::RemoveInPage(BPlusTreePage *curr_page, const KeyType &key, 
       left_most_ = right_most_ = new_root_page->GetPageId();
 
       // 删除旧root_page, 断言一定
-      UnPinPage(root_page, false);
-      bool deleted = DeletePage(root_page);
+      UnPinPage(old_root_page, false);
+      bool deleted = DeletePage(old_root_page);
       assert(deleted == true);
       return;
     }
+    // root_page 可以小于等于 min_size
     UnPinPage(curr_page, false);
     return;
   }

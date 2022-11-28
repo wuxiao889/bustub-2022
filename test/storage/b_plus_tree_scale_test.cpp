@@ -31,7 +31,7 @@ TEST(BPlusTreeTests, InsertTest1) {
   auto *disk_manager = new DiskManager("test.db");
   BufferPoolManager *bpm = new BufferPoolManagerInstance(50, disk_manager);
   // create b+ tree
-  BPlusTree<GenericKey<8>, RID, GenericComparator<8>> tree("foo_pk", bpm, comparator, 4, 4);
+  BPlusTree<GenericKey<8>, RID, GenericComparator<8>> tree("foo_pk", bpm, comparator,5,5);
   GenericKey<8> index_key;
   RID rid;
   // create transaction
@@ -42,9 +42,13 @@ TEST(BPlusTreeTests, InsertTest1) {
   auto header_page = bpm->NewPage(&page_id);
   (void)header_page;
 
-  int size = 50;
+  // TODO(wxx)  修改这里测试
+  int size = 5000;
+
   std::vector<int64_t> keys(size);
+
   std::iota(keys.begin(), keys.end(), 1);
+
   std::random_device rd;
   std::mt19937 g(rd());
   std::shuffle(keys.begin(), keys.end(), g);
@@ -56,24 +60,22 @@ TEST(BPlusTreeTests, InsertTest1) {
     tree.Insert(index_key, rid, transaction);
   }
 
-  tree.Draw(bpm, "/home/wxx/bustub-private/build-vscode/bin/ScaleTest_" + std::to_string(size) + ".dot");
-
   std::vector<RID> rids;
 
+  // std::shuffle(keys.begin(), keys.end(), g);
+
+  // for (auto key : keys) {
+  //   rids.clear();
+  //   index_key.SetFromInteger(key);
+  //   tree.GetValue(index_key, &rids);
+  //   EXPECT_EQ(rids.size(), 1);
+
+  //   int64_t value = key & 0xFFFFFFFF;
+  //   EXPECT_EQ(rids[0].GetSlotNum(), value);
+  // }
+
   std::shuffle(keys.begin(), keys.end(), g);
 
-  for (auto key : keys) {
-    rids.clear();
-    index_key.SetFromInteger(key);
-    tree.GetValue(index_key, &rids);
-    EXPECT_EQ(rids.size(), 1);
-
-    int64_t value = key & 0xFFFFFFFF;
-    EXPECT_EQ(rids[0].GetSlotNum(), value);
-  }
-
-  std::shuffle(keys.begin(), keys.end(), g);
-  
   for (auto key : keys) {
     index_key.SetFromInteger(key);
     tree.Remove(index_key, transaction);
@@ -81,7 +83,6 @@ TEST(BPlusTreeTests, InsertTest1) {
   
   EXPECT_EQ(true, tree.IsEmpty());
   
-  tree.Draw(bpm, "/home/wxx/bustub-private/build-vscode/bin/ScaleTest_after_remove" + std::to_string(size) + ".dot");
   bpm->UnpinPage(HEADER_PAGE_ID, true);
 
   delete transaction;
