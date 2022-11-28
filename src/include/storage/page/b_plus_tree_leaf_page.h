@@ -63,7 +63,7 @@ class BPlusTreeLeafPage : public BPlusTreePage {
   void ShiftLeft(int i = 0);
   void ShiftRight();
 
-  void Copy(const BPlusTreeLeafPage *p, int dst, int first, int last);
+  void Copy(const BPlusTreeLeafPage *src, int result, int first, int last);
 
  private:
   page_id_t next_page_id_;
@@ -72,4 +72,5 @@ class BPlusTreeLeafPage : public BPlusTreePage {
   // keyType , valuetype = record id
   MappingType array_[1];
 };
+
 }  // namespace bustub

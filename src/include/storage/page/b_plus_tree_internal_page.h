@@ -54,6 +54,8 @@ class BPlusTreeInternalPage : public BPlusTreePage {
   void ShiftLeft(int i = 0);
   void ShiftRight();
 
+  void Copy(const BPlusTreeInternalPage *src, int result, int first, int last);
+
  private:
   // std::pair<KeyType, ValueType>
   // Flexible array member for page data.

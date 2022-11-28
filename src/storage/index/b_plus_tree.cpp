@@ -19,12 +19,15 @@
 #include "common/macros.h"
 #include "common/rid.h"
 #include "concurrency/transaction.h"
+#include "storage/page/b_plus_tree_internal_page.h"
+#include "storage/page/b_plus_tree_leaf_page.h"
 #include "storage/page/b_plus_tree_page.h"
 #include "storage/page/header_page.h"
 
 namespace bustub {
 
 int step_cont = 0;
+int tot = 0;
 
 INDEX_TEMPLATE_ARGUMENTS
 BPLUSTREE_TYPE::BPlusTree(std::string name, BufferPoolManager *buffer_pool_manager, const KeyComparator &comparator,
@@ -136,11 +139,12 @@ auto BPLUSTREE_TYPE::InsertInPage(BPlusTreePage *page, const KeyType &key, const
     LeafPage *leaf_page = CastLeafPage(page);
     int index = leaf_page->LowerBound(key, comparator_);
     if (index < leaf_page->GetSize() && comparator_(leaf_page->KeyAt(index), key) == 0) {
-      // LOG_INFO("key ununique");
+      LOG_INFO("\033[1;31m key %ld insert fail !\033[0m", key.ToString());
       UnPinPage(leaf_page, false);
       return false;
     }
     leaf_page->InsertAndIncrease(index, key, value);
+    tot++;
     // LOG_INFO("insert to leaf page %d at index %d", leaf_page->GetPageId(), index);
     if (leaf_page->GetSize() == leaf_page->GetMaxSize()) {
       SplitLeaf(leaf_page);
@@ -166,21 +170,19 @@ auto BPLUSTREE_TYPE::InsertInPage(BPlusTreePage *page, const KeyType &key, const
 INDEX_TEMPLATE_ARGUMENTS
 void BPLUSTREE_TYPE::SplitLeaf(LeafPage *left_page) {
   int x;
-  x = leaf_max_size_ / 2;
+  x = left_page->GetMaxSize() / 2;
 
   int right_page_id;
   LeafPage *right_page = NewLeafPage(&right_page_id, left_page->GetParentPageId());
 
-  for (int i = x, j = 0; i < leaf_max_size_; i++, j++) {
-    right_page->SetKeyAt(j, left_page->KeyAt(i));
-    right_page->SetValueAt(j, left_page->ValueAt(i));
-    left_page->SetKeyAt(i, KeyType{});
-    left_page->SetValueAt(i, ValueType{});
-  }
+  right_page->Copy(left_page, 0, x, left_page->GetMaxSize());
+  // for (int i = x, j = 0; i < left_page->GetMaxSize(); i++, j++) {
+  //   right_page->SetKeyAt(j, left_page->KeyAt(i));
+  //   right_page->SetValueAt(j, left_page->ValueAt(i));
+  // }
 
   left_page->SetSize(x);
-  right_page->SetSize(leaf_max_size_ - x);
-  assert(right_page->GetSize() == leaf_max_size_ - x);
+  right_page->SetSize(left_page->GetMaxSize() - x);
 
   if (right_most_ == left_page->GetPageId()) {
     right_most_ = right_page_id;
@@ -193,10 +195,11 @@ void BPLUSTREE_TYPE::SplitLeaf(LeafPage *left_page) {
     InternalPage *root_page = NewInternalRootPage(&root_page_id_);
     UpdateRootPageId(0);
 
-    root_page->InsertAndIncrease(0, KeyType{}, left_page->GetPageId());
-    root_page->InsertAndIncrease(1, key, right_page_id);
+    root_page->SetValueAt(0, left_page->GetPageId());
 
-    assert(root_page->GetSize() == 2);
+    root_page->SetKeyAt(1, key);
+    root_page->SetValueAt(1, right_page_id);
+    root_page->SetSize(2);
 
     left_page->SetParentPageId(root_page_id_);
     right_page->SetParentPageId(root_page_id_);
@@ -208,7 +211,9 @@ void BPLUSTREE_TYPE::SplitLeaf(LeafPage *left_page) {
   } else {
     InternalPage *parent_page = FetchParent(left_page);
     assert(parent_page->GetSize() <= parent_page->GetMaxSize());
+
     int index = parent_page->LowerBound(key, comparator_);
+    assert(index > 0);
     parent_page->InsertAndIncrease(index, key, right_page_id);
     // LOG_INFO("leaf page %d split parent_page id %d at index %d ", left_page->GetPageId(), parent_page->GetPageId(),
     //  index);
@@ -223,19 +228,23 @@ void BPLUSTREE_TYPE::SplitLeaf(LeafPage *left_page) {
 INDEX_TEMPLATE_ARGUMENTS
 void BPLUSTREE_TYPE::SplitInternal(InternalPage *left_page) {
   // LOG_INFO("internal page %d split", left_page->GetPageId());
+  // left_page.size = internal_max + 1;
   int x;
-  x = (leaf_max_size_ + 1) / 2;
+  x = left_page->GetSize() / 2;
+
   int right_page_id;
   InternalPage *right_page = NewInternalPage(&right_page_id, left_page->GetParentPageId());
 
-  for (int i = x, j = 0; i <= internal_max_size_; i++, j++) {
-    assert(left_page->ValueAt(i) != INVALID_PAGE_ID);
-    right_page->SetKeyAt(j, left_page->KeyAt(i));
-    right_page->SetValueAt(j, left_page->ValueAt(i));
-    left_page->SetValueAt(i, INVALID_PAGE_ID);
-  }
+  right_page->Copy(left_page, 0, x, left_page->GetSize());
+
+  // for (int i = x, j = 0; i <= internal_max_size_; i++, j++) {
+  //   right_page->SetKeyAt(j, left_page->KeyAt(i));
+  //   right_page->SetValueAt(j, left_page->ValueAt(i));
+  // }
+
   left_page->SetSize(x);
   right_page->SetSize(internal_max_size_ - x + 1);
+
   for (int i = 0; i < right_page->GetSize(); i++) {
     BPlusTreePage *child_page = FetchChild(right_page, i);
     child_page->SetParentPageId(right_page_id);
@@ -248,15 +257,19 @@ void BPLUSTREE_TYPE::SplitInternal(InternalPage *left_page) {
   if (left_page->IsRootPage()) {
     InternalPage *root_page = NewInternalRootPage(&root_page_id_);
     UpdateRootPageId(0);
+
     left_page->SetParentPageId(root_page_id_);
     right_page->SetParentPageId(root_page_id_);
+
     root_page->InsertAndIncrease(0, KeyType{}, left_page->GetPageId());
     root_page->InsertAndIncrease(1, key, right_page_id);
+
     assert(root_page->GetSize() == 2);
     UnPinPage(root_page, true);
   } else {
     InternalPage *parent_page = FetchParent(left_page);
     int index = parent_page->LowerBound(key, comparator_);
+    assert(index > 0);
     parent_page->InsertAndIncrease(index, key, right_page_id);
     UnPinPage(parent_page, true);
   }
@@ -297,18 +310,19 @@ void BPLUSTREE_TYPE::RemoveInPage(BPlusTreePage *curr_page, const KeyType &key, 
     int index = leaf_page->LowerBound(key, comparator_);
     old_key0 = leaf_page->KeyAt(0);
     if (index < leaf_page->GetSize() && comparator_(leaf_page->KeyAt(index), key) == 0) {
-      LOG_INFO("in child page %d index %d delete", leaf_page->GetPageId(), index);
+      // LOG_INFO("in child page %d index %d delete", leaf_page->GetPageId(), index);
       leaf_page->ShiftLeft(index);
       leaf_page->IncreaseSize(-1);
+      tot--;
     } else {
-      LOG_INFO("key %ld not found", key.ToString());
+      LOG_INFO("\033[1;31m key %ld not found \033[0m", key.ToString());
       ToString(curr_page, buffer_pool_manager_);
     }
   } else {
     InternalPage *internal_page = CastInternalPage(curr_page);
     int index = internal_page->UpperBound(key, comparator_);
     BPlusTreePage *next_page = FetchChild(internal_page, index - 1);
-    LOG_INFO("go to child page %d index %d", next_page->GetPageId(), index - 1);
+    // LOG_INFO("go to child page %d index %d", next_page->GetPageId(), index - 1);
     RemoveInPage(next_page, key, transaction);
   }
 
@@ -794,6 +808,7 @@ auto BPLUSTREE_TYPE::NewLeafPage(page_id_t *page_id, page_id_t parent_id) -> Lea
 
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::NewLeafRootPage(page_id_t *page_id) -> LeafPage * {
+  LOG_INFO("%ld %ld %ld", LEAF_PAGE_SIZE, INTERNAL_PAGE_SIZE, sizeof(MappingType));
   LeafPage *p = CastLeafPage(PageToB(buffer_pool_manager_->NewPage(page_id)));
   p->Init(*page_id, INVALID_PAGE_ID, leaf_max_size_);
   left_most_ = *page_id;

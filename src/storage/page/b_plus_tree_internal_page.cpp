@@ -101,6 +101,11 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::ShiftRight() {
 }
 
 INDEX_TEMPLATE_ARGUMENTS
+void B_PLUS_TREE_INTERNAL_PAGE_TYPE::Copy(const BPlusTreeInternalPage *src, int result, int first, int last) {
+  std::copy(src->array_ + first, src->array_ + last, array_ + result);
+}
+
+INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::UpperBound(const KeyType &key, const KeyComparator &cmp) -> int {
   int left = 1;
   int right = GetSize();
@@ -117,7 +122,7 @@ auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::UpperBound(const KeyType &key, const KeyCom
 
 INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::InsertAndIncrease(int index, const KeyType &key, const ValueType &value) -> void {
-  BUSTUB_ASSERT(index <= GetSize(), "index <= GetSize()");
+  assert(index <= GetSize());
   array_[GetSize()] = MappingType{key, value};
   for (int j = GetSize(); j > index; --j) {
     std::swap(array_[j], array_[j - 1]);

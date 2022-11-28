@@ -80,6 +80,11 @@ void B_PLUS_TREE_LEAF_PAGE_TYPE::ShiftRight() {
 }
 
 INDEX_TEMPLATE_ARGUMENTS
+void B_PLUS_TREE_LEAF_PAGE_TYPE::Copy(const BPlusTreeLeafPage *src, int result, int first, int last) {
+  std::copy(src->array_ + first, src->array_ + last, array_ + result);
+}
+
+INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_LEAF_PAGE_TYPE::LowerBound(const KeyType &key, const KeyComparator &cmp) const -> int {
   // int res = std::lower_bound(array_, array_ + GetSize(), key,
   //                            [&](const MappingType &x, const KeyType &key) { return cmp(x.first, key) == -1; }) -
