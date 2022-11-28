@@ -181,7 +181,7 @@ TEST(BPlusTreeTests, InsertTest3) {
   (void)header_page;
 
   // TODO(wxx)  修改这里测试
-  int size = 100000;
+  int size = 300000;
 
   std::vector<int64_t> keys(size);
 
@@ -197,7 +197,8 @@ TEST(BPlusTreeTests, InsertTest3) {
     index_key.SetFromInteger(key);
     tree.Insert(index_key, rid, transaction);
   }
-
+  std::cout << tree.GetLevel() << std::endl;
+  
   std::vector<RID> rids;
 
   std::shuffle(keys.begin(), keys.end(), g);
