@@ -31,7 +31,7 @@ TEST(BPlusTreeTests, InsertTest1) {
   auto *disk_manager = new DiskManager("test.db");
   BufferPoolManager *bpm = new BufferPoolManagerInstance(50, disk_manager);
   // create b+ tree
-  BPlusTree<GenericKey<8>, RID, GenericComparator<8>> tree("foo_pk", bpm, comparator,5,5);
+  BPlusTree<GenericKey<8>, RID, GenericComparator<8>> tree("foo_pk", bpm, comparator);
   GenericKey<8> index_key;
   RID rid;
   // create transaction
@@ -43,7 +43,7 @@ TEST(BPlusTreeTests, InsertTest1) {
   (void)header_page;
 
   // TODO(wxx)  修改这里测试
-  int size = 5000;
+  int size = 300000;
 
   std::vector<int64_t> keys(size);
 
@@ -62,17 +62,17 @@ TEST(BPlusTreeTests, InsertTest1) {
 
   std::vector<RID> rids;
 
-  // std::shuffle(keys.begin(), keys.end(), g);
+  std::shuffle(keys.begin(), keys.end(), g);
 
-  // for (auto key : keys) {
-  //   rids.clear();
-  //   index_key.SetFromInteger(key);
-  //   tree.GetValue(index_key, &rids);
-  //   EXPECT_EQ(rids.size(), 1);
+  for (auto key : keys) {
+    rids.clear();
+    index_key.SetFromInteger(key);
+    tree.GetValue(index_key, &rids);
+    EXPECT_EQ(rids.size(), 1);
 
-  //   int64_t value = key & 0xFFFFFFFF;
-  //   EXPECT_EQ(rids[0].GetSlotNum(), value);
-  // }
+    int64_t value = key & 0xFFFFFFFF;
+    EXPECT_EQ(rids[0].GetSlotNum(), value);
+  }
 
   std::shuffle(keys.begin(), keys.end(), g);
 

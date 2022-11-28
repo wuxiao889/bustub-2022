@@ -60,7 +60,7 @@ auto BPLUSTREE_TYPE::IsEmpty() const -> bool {
  */
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::GetValue(const KeyType &key, std::vector<ValueType> *result, Transaction *transaction) -> bool {
-  LOG_INFO("\033[1;34mGetValue %ld\033[0m", key.ToString());
+  // LOG_INFO("\033[1;34mGetValue %ld\033[0m", key.ToString());
   if (IsEmpty()) {
     return false;
   }
