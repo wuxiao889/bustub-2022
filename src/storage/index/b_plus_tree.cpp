@@ -1,12 +1,8 @@
 #include "storage/index/b_plus_tree.h"
-#include <bits/types/FILE.h>
-#include <fcntl.h>
-#include <unistd.h>
+#include <algorithm>
 #include <cassert>
 #include <cstdio>
 #include <cstring>
-#include <filesystem>
-#include <functional>
 #include <iostream>
 #include <memory>
 #include <string>
@@ -27,7 +23,6 @@
 namespace bustub {
 
 int step_cont = 0;
-int tot = 0;
 
 INDEX_TEMPLATE_ARGUMENTS
 BPLUSTREE_TYPE::BPlusTree(std::string name, BufferPoolManager *buffer_pool_manager, const KeyComparator &comparator,
@@ -121,8 +116,8 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
     root_page = FetchPage(root_page_id_);
   }
   bool ok = InsertInPage(root_page, key, value, transaction);
-  // char buf[50];
-  // std::sprintf(buf, "step%d_insert%ld.dot", ++step_cont, key.ToString());
+  // char buf[100];
+  // std::sprintf(buf, "/home/wxx/bustub-private/build-vscode/bin/step%d_insert%ld.dot", ++step_cont, key.ToString());
   // Draw(buffer_pool_manager_, buf);
   buffer_pool_manager_->CheckPinCount();
   if (is_empty_ && ok) {
@@ -160,20 +155,14 @@ auto BPLUSTREE_TYPE::InsertInPage(BPlusTreePage *page, const KeyType &key, const
 
   bool ok = InsertInPage(next_page, key, value, transaction);
 
-  if (ok && inter_page->GetSize() == inter_page->GetMaxSize() + 1) {
-    SplitInternal(inter_page);
-    UnPinPage(inter_page, true);
-  } else {
-    UnPinPage(inter_page, false);
-  }
+  UnPinPage(inter_page, false);
 
   return ok;
 }
 
 INDEX_TEMPLATE_ARGUMENTS
 void BPLUSTREE_TYPE::SplitLeaf(LeafPage *left_page) {
-  int x;
-  x = left_page->GetMaxSize() / 2;
+  int x = left_page->GetMaxSize() / 2;
 
   int right_page_id;
   LeafPage *right_page = NewLeafPage(&right_page_id, left_page->GetParentPageId());
@@ -188,7 +177,12 @@ void BPLUSTREE_TYPE::SplitLeaf(LeafPage *left_page) {
   }
 
   KeyType key = right_page->KeyAt(0);
+  InsertInParent(left_page, right_page, key, right_page_id);
+}
 
+INDEX_TEMPLATE_ARGUMENTS
+void BPLUSTREE_TYPE::InsertInParent(BPlusTreePage *left_page, BPlusTreePage *right_page, const KeyType &key,
+                                    page_id_t value) {
   if (left_page->IsRootPage()) {
     // LOG_INFO("leaf page %d split noroot", left_page->GetPageId());
     InternalPage *root_page = NewInternalRootPage(&root_page_id_);
@@ -197,79 +191,81 @@ void BPLUSTREE_TYPE::SplitLeaf(LeafPage *left_page) {
     root_page->SetValueAt(0, left_page->GetPageId());
 
     root_page->SetKeyAt(1, key);
-    root_page->SetValueAt(1, right_page_id);
+    root_page->SetValueAt(1, right_page->GetPageId());
     root_page->SetSize(2);
 
     left_page->SetParentPageId(root_page_id_);
     right_page->SetParentPageId(root_page_id_);
 
-    left_page->SetNextPageId(right_page_id);
+    if (left_page->IsLeafPage()) {
+      auto leafpage = CastLeafPage(left_page);
+      leafpage->SetNextPageId(right_page->GetPageId());
+    }
 
     UnPinPage(root_page, true);
-
+    UnPinPage(left_page, true);
+    UnPinPage(right_page, true);
   } else {
     InternalPage *parent_page = FetchParent(left_page);
     assert(parent_page->GetSize() <= parent_page->GetMaxSize());
 
-    int index = parent_page->LowerBound(key, comparator_);
-    assert(index > 0);
-    parent_page->InsertAndIncrease(index, key, right_page_id);
-    // LOG_INFO("leaf page %d split parent_page id %d at index %d ", left_page->GetPageId(), parent_page->GetPageId(),
-    //  index);
-    right_page->SetNextPageId(left_page->GetNextPageId());
-    left_page->SetNextPageId(right_page_id);
-    UnPinPage(parent_page, true);
+    if (left_page->IsLeafPage()) {
+      auto leafpage = CastLeafPage(left_page);
+      auto rightpage = CastLeafPage(right_page);
+      rightpage->SetNextPageId(leafpage->GetNextPageId());
+      leafpage->SetNextPageId(right_page->GetPageId());
+    }
+
+    if (parent_page->GetSize() < parent_page->GetMaxSize()) {
+      int index = parent_page->LowerBound(key, comparator_);
+      assert(index > 0);
+      parent_page->InsertAndIncrease(index, key, right_page->GetPageId());
+      // LOG_INFO("leaf page %d split parent_page id %d at index %d ", left_page->GetPageId(), parent_page->GetPageId(),
+      //  index);
+
+      UnPinPage(parent_page, true);
+      UnPinPage(left_page, true);
+      UnPinPage(right_page, true);
+    } else {
+      // split Internal
+
+      // 找一个更大的空间存储，二分 然后插入
+      auto vec = parent_page->DumpAll();
+
+      int index = std::lower_bound(vec.begin() + 1, vec.end(), key,
+                                   [&](const std::pair<KeyType, page_id_t> &l, const KeyType &r) {
+                                     return comparator_(l.first, r) < 0;
+                                   }) -
+                  vec.begin();
+      vec.insert(vec.begin() + index, {key, right_page->GetPageId()});
+
+      // 分裂
+      int parent_right_page_id;
+      InternalPage *parent_right_page = NewInternalPage(&parent_right_page_id, parent_page->GetParentPageId());
+
+      int x = parent_page->GetMinSize();
+      parent_page->Copy(vec, 0, 0, x);
+      parent_right_page->Copy(vec, 0, x, vec.size());
+
+      parent_page->SetSize(x);
+      parent_right_page->SetSize(vec.size() - x);
+      assert(parent_right_page->GetSize() == internal_max_size_ - x + 1);
+
+      UpdateChild(parent_right_page, 0, parent_right_page->GetSize());
+
+      KeyType key0 = parent_right_page->KeyAt(0);
+      parent_right_page->SetKeyAt(0, KeyType{});
+
+      UnPinPage(left_page, true);
+      UnPinPage(right_page, true);
+
+      InsertInParent(parent_page, parent_right_page, key0, parent_right_page->GetPageId());
+    }
   }
-  // UnPinPage(left_page, true);
-  UnPinPage(right_page, true);
 }
 
 INDEX_TEMPLATE_ARGUMENTS
-void BPLUSTREE_TYPE::SplitInternal(InternalPage *left_page) {
-  // LOG_INFO("internal page %d split", left_page->GetPageId());
-  // left_page.size = internal_max + 1;
-  int x;
-  x = left_page->GetSize() / 2;
-
-  int right_page_id;
-  InternalPage *right_page = NewInternalPage(&right_page_id, left_page->GetParentPageId());
-
-  right_page->Copy(left_page, 0, x, left_page->GetSize());
-
-  left_page->SetSize(x);
-  right_page->SetSize(internal_max_size_ - x + 1);
-
-  for (int i = 0; i < right_page->GetSize(); i++) {
-    BPlusTreePage *child_page = FetchChild(right_page, i);
-    child_page->SetParentPageId(right_page_id);
-    UnPinPage(child_page, true);
-  }
-
-  KeyType key = right_page->KeyAt(0);
-  right_page->SetKeyAt(0, KeyType{});
-
-  if (left_page->IsRootPage()) {
-    InternalPage *root_page = NewInternalRootPage(&root_page_id_);
-    UpdateRootPageId(0);
-
-    left_page->SetParentPageId(root_page_id_);
-    right_page->SetParentPageId(root_page_id_);
-
-    root_page->InsertAndIncrease(0, KeyType{}, left_page->GetPageId());
-    root_page->InsertAndIncrease(1, key, right_page_id);
-
-    assert(root_page->GetSize() == 2);
-    UnPinPage(root_page, true);
-  } else {
-    InternalPage *parent_page = FetchParent(left_page);
-    int index = parent_page->LowerBound(key, comparator_);
-    assert(index > 0);
-    parent_page->InsertAndIncrease(index, key, right_page_id);
-    UnPinPage(parent_page, true);
-  }
-  // UnPinPage(left_page, true);
-  UnPinPage(right_page, true);
-}
+void BPLUSTREE_TYPE::SplitInternal(InternalPage *left_page) {}
 
 /*****************************************************************************
  * REMOVE
@@ -293,7 +289,6 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
   // std::sprintf(buf, "step%d_remove%ld.dot", ++step_cont, key.ToString());
   // Draw(buffer_pool_manager_, buf);
   buffer_pool_manager_->CheckPinCount();
-  // buffer_pool_manager_->FlushAllPages();
 }
 
 INDEX_TEMPLATE_ARGUMENTS
@@ -311,6 +306,7 @@ void BPLUSTREE_TYPE::RemoveInPage(BPlusTreePage *curr_page, const KeyType &key, 
       // LOG_INFO("in child page %d index %d delete", leaf_page->GetPageId(), index);
       leaf_page->ShiftLeft(index);
       leaf_page->IncreaseSize(-1);
+      // TODO(wxx) 怎么避免手动刷脏
       buffer_pool_manager_->FlushPage(leaf_page->GetPageId());
       // UnPinPage(leaf_page, true);  // 不能unpin 还在使用
     } else {
@@ -337,7 +333,7 @@ void BPLUSTREE_TYPE::RemoveInPage(BPlusTreePage *curr_page, const KeyType &key, 
       // LOG_INFO("cur_page only have one leaf root page");
       if (curr_page->GetSize() == 0) {
         is_empty_ = true;
-        LOG_INFO("is_empty_ = true;");
+        // LOG_INFO("is_empty_ = true;");
       }
       UnPinPage(curr_page, false);
       return;
@@ -356,10 +352,11 @@ void BPLUSTREE_TYPE::RemoveInPage(BPlusTreePage *curr_page, const KeyType &key, 
       UnPinPage(new_root_page, true);
       left_most_ = right_most_ = new_root_page->GetPageId();
 
-      // 删除旧root_page, 断言一定
+      // 删除旧root_page, 断言一定成功
       UnPinPage(old_root_page, false);
       bool deleted = DeletePage(old_root_page);
       assert(deleted == true);
+
       return;
     }
     // root_page 可以小于等于 min_size
@@ -374,34 +371,26 @@ void BPLUSTREE_TYPE::RemoveInPage(BPlusTreePage *curr_page, const KeyType &key, 
     curr_pos = CalcPositionInParent(curr_page, old_key0, false);
   }
 
-  // // LOG_INFO("cur_page %d pos %d in parent", curr_page->GetPageId(), cur_pos);
+  // LOG_INFO("cur_page %d pos %d in parent", curr_page->GetPageId(), cur_pos);
 
   if (curr_pos == 0) {
     BPlusTreePage *right_page = FetchSibling(curr_page, curr_pos + 1);
     assert(right_page != nullptr);
     assert(right_page->GetSize() >= right_page->GetMinSize());
+
     if (right_page->GetSize() > right_page->GetMinSize()) {
       Redistribute(curr_page, right_page, 0, 0);
     } else {
       Merge(curr_page, right_page, curr_pos);
     }
+
   } else {
     BPlusTreePage *left_page = FetchSibling(curr_page, curr_pos - 1);
-    BPlusTreePage *right_page = FetchSibling(curr_page, curr_pos + 1);
     assert(left_page->GetSize() >= left_page->GetMinSize());
 
     if (left_page->GetSize() > left_page->GetMinSize()) {
-      if (right_page != nullptr) {
-        UnPinPage(right_page, false);
-      }
       Redistribute(left_page, curr_page, curr_pos - 1, 1);
-    } else if (right_page != nullptr && right_page->GetSize() > right_page->GetMinSize()) {
-      UnPinPage(left_page, false);
-      Redistribute(curr_page, right_page, curr_pos, 0);
     } else {
-      if (right_page != nullptr) {
-        UnPinPage(right_page, false);
-      }
       Merge(left_page, curr_page, curr_pos - 1);
     }
   }
@@ -484,14 +473,12 @@ INDEX_TEMPLATE_ARGUMENTS
 void BPLUSTREE_TYPE::Merge(BPlusTreePage *left, BPlusTreePage *right, int posOfLeftPage) {
   // // LOG_INFO("Merge page %d %d pos_of_left %d", left->GetPageId(), right->GetPageId(), posOfLeftPage);
   InternalPage *parent = FetchParent(left);
+
   if (left->IsLeafPage()) {
     LeafPage *left_page = CastLeafPage(left);
     LeafPage *right_page = CastLeafPage(right);
 
-    for (int i = left_page->GetSize(), j = 0; j < right_page->GetSize(); i++, j++) {
-      left_page->SetValueAt(i, right_page->ValueAt(j));
-      left_page->SetKeyAt(i, right_page->KeyAt(j));
-    }
+    left_page->Copy(right_page, left->GetSize(), 0, right_page->GetSize());
     left_page->IncreaseSize(right_page->GetSize());
 
     left_page->SetNextPageId(right_page->GetNextPageId());
@@ -513,17 +500,11 @@ void BPLUSTREE_TYPE::Merge(BPlusTreePage *left, BPlusTreePage *right, int posOfL
     left_page->SetValueAt(left_page->GetSize(), right_page->ValueAt(0));
     left_page->IncreaseSize(1);
 
-    for (int i = left_page->GetSize(), j = 1; j < right_page->GetSize(); i++, j++) {
-      left_page->SetValueAt(i, right_page->ValueAt(j));
-      left_page->SetKeyAt(i, right_page->KeyAt(j));
-    }
+    left_page->Copy(right_page, left_page->GetSize(), 1, right_page->GetSize());
+
     left_page->IncreaseSize(right_page->GetSize() - 1);
 
-    for (int i = old_size; i < left_page->GetSize(); i++) {
-      BPlusTreePage *child_page = FetchChild(left_page, i);
-      child_page->SetParentPageId(left_page->GetPageId());
-      UnPinPage(child_page, true);
-    }
+    UpdateChild(left_page, old_size, left->GetSize());
 
     UnPinPage(right_page, false);
     bool deleted = DeletePage(right_page);
@@ -534,6 +515,15 @@ void BPLUSTREE_TYPE::Merge(BPlusTreePage *left, BPlusTreePage *right, int posOfL
   parent->IncreaseSize(-1);
   UnPinPage(left, true);
   UnPinPage(parent, true);
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+void BPLUSTREE_TYPE::UpdateChild(InternalPage *page, int first, int last) {
+  for (int i = first; i < last; i++) {
+    auto child = FetchChild(page, i);
+    child->SetParentPageId(page->GetPageId());
+    UnPinPage(child, true);
+  }
 }
 
 /*****************************************************************************
@@ -808,7 +798,6 @@ auto BPLUSTREE_TYPE::NewLeafPage(page_id_t *page_id, page_id_t parent_id) -> Lea
 
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::NewLeafRootPage(page_id_t *page_id) -> LeafPage * {
-  LOG_INFO("%ld %ld %ld", LEAF_PAGE_SIZE, INTERNAL_PAGE_SIZE, sizeof(MappingType));
   LeafPage *p = CastLeafPage(PageToB(buffer_pool_manager_->NewPage(page_id)));
   p->Init(*page_id, INVALID_PAGE_ID, leaf_max_size_);
   left_most_ = *page_id;
@@ -854,7 +843,7 @@ auto BPLUSTREE_TYPE::FetchSibling(BPlusTreePage *page, int index) -> BPlusTreePa
 }
 
 INDEX_TEMPLATE_ARGUMENTS
-auto BPLUSTREE_TYPE::FetchChild(InternalPage *page, int index) -> BPlusTreePage * {
+auto BPLUSTREE_TYPE::FetchChild(InternalPage *page, int index) const -> BPlusTreePage * {
   page_id_t page_id = page->ValueAt(index);
   BPlusTreePage *res = FetchPage(page_id);
   return res;
@@ -899,6 +888,28 @@ auto BPLUSTREE_TYPE::CalcPositionInParent(BPlusTreePage *page, const KeyType &ke
   assert(position <= parent_page->GetSize());
   UnPinPage(parent_page, false);
   return position - 1;
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+auto BPLUSTREE_TYPE::GetLevel() const -> int {
+  if (IsEmpty()) {
+    return 0;
+  }
+  auto root_page = FetchPage(root_page_id_);
+  if (root_page->IsLeafPage()) {
+    return 1;
+  }
+  // InternalPage* page = CastInternalPage(root_page);
+  auto curr_page = root_page;
+  int level{1};
+  while (!curr_page->IsLeafPage()) {
+    auto next_page = FetchChild(CastInternalPage(curr_page), 0);
+    UnPinPage(curr_page, false);
+    curr_page = next_page;
+    level++;
+  }
+  UnPinPage(curr_page, false);
+  return level;
 }
 
 template class BPlusTree<GenericKey<4>, RID, GenericComparator<4>>;

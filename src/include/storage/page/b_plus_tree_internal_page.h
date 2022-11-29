@@ -13,6 +13,7 @@
 #include <queue>
 
 #include "storage/page/b_plus_tree_page.h"
+#include "storage/page/hash_table_page_defs.h"
 
 namespace bustub {
 
@@ -55,6 +56,9 @@ class BPlusTreeInternalPage : public BPlusTreePage {
   void ShiftRight();
 
   void Copy(const BPlusTreeInternalPage *src, int result, int first, int last);
+  void Copy(const std::vector<MappingType>& src, int result, int first, int last);
+
+  auto DumpAll() -> std::vector<MappingType>;
 
  private:
   // std::pair<KeyType, ValueType>

@@ -80,8 +80,11 @@ class BPlusTree {
   // read data from file and remove one by one
   void RemoveFromFile(const std::string &file_name, Transaction *transaction = nullptr);
 
+  auto GetLevel() const -> int;
+
  private:
   auto LoopUp(const KeyType &key, BPlusTreePage *page) -> std::pair<LeafPage *, int>;
+
   auto InsertInPage(BPlusTreePage *page, const KeyType &key, const ValueType &value, Transaction *transaction = nullptr)
       -> bool;
 
@@ -98,17 +101,13 @@ class BPlusTree {
 
   void SplitInternal(InternalPage *page);
 
-  void UpdateRootPageId(int insert_record = 0);
-  /* Debug Routines for FREE!! */
-  void ToGraph(BPlusTreePage *page, BufferPoolManager *bpm, std::ofstream &out) const;
-
-  void ToString(BPlusTreePage *page, BufferPoolManager *bpm) const;
+  void UpdateChild(InternalPage *page, int first, int last);
 
   auto PageToB(Page *page) const -> BPlusTreePage * { return reinterpret_cast<BPlusTreePage *>(page->GetData()); }
   // auto PageToL(Page *page) -> LeafPage * { return reinterpret_cast<LeafPage *>(page->GetData()); }
   // auto PageToI(Page *page) -> InternalPage * { return reinterpret_cast<InternalPage *>(page->GetData()); }
-  auto CastLeafPage(BPlusTreePage *page) -> LeafPage * { return static_cast<LeafPage *>(page); }
-  auto CastInternalPage(BPlusTreePage *page) -> InternalPage * { return static_cast<InternalPage *>(page); }
+  auto CastLeafPage(BPlusTreePage *page) const -> LeafPage * { return static_cast<LeafPage *>(page); }
+  auto CastInternalPage(BPlusTreePage *page) const -> InternalPage * { return static_cast<InternalPage *>(page); }
 
   auto NewLeafPage(page_id_t *page_id, page_id_t parent_id) -> LeafPage *;
   auto NewLeafRootPage(page_id_t *page_id) -> LeafPage *;
@@ -116,7 +115,7 @@ class BPlusTree {
   auto NewInternalRootPage(page_id_t *page_id) -> InternalPage *;
 
   auto FetchPage(page_id_t page_id) const -> BPlusTreePage *;
-  auto FetchChild(InternalPage *page, int index) -> BPlusTreePage *;
+  auto FetchChild(InternalPage *page, int index) const -> BPlusTreePage *;
 
   auto FetchParent(BPlusTreePage *page) -> InternalPage *;
   auto FetchSibling(BPlusTreePage *page, int index) -> BPlusTreePage *;
@@ -127,7 +126,13 @@ class BPlusTree {
 
   auto CalcPositionInParent(BPlusTreePage *page, const KeyType &key, bool useKey) -> int;
 
-  void CheckPinCount();
+  void InsertInParent(BPlusTreePage *left_page, BPlusTreePage *right_page, const KeyType &key, page_id_t value);
+
+  void UpdateRootPageId(int insert_record = 0);
+  /* Debug Routines for FREE!! */
+  void ToGraph(BPlusTreePage *page, BufferPoolManager *bpm, std::ofstream &out) const;
+
+  void ToString(BPlusTreePage *page, BufferPoolManager *bpm) const;
 
   // member variable
   std::string index_name_;
