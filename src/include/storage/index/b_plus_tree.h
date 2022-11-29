@@ -83,7 +83,7 @@ class BPlusTree {
   auto GetLevel() const -> int;
 
  private:
-  auto LoopUp(const KeyType &key, BPlusTreePage *page) -> std::pair<LeafPage *, int>;
+  auto FindLeafPage(const KeyType &key,  Transaction *transaction = nullptr) -> Page *;
 
   auto InsertInPage(BPlusTreePage *page, const KeyType &key, const ValueType &value, Transaction *transaction = nullptr)
       -> bool;
@@ -103,9 +103,10 @@ class BPlusTree {
 
   void UpdateChild(InternalPage *page, int first, int last);
 
-  auto PageToB(Page *page) const -> BPlusTreePage * { return reinterpret_cast<BPlusTreePage *>(page->GetData()); }
-  // auto PageToL(Page *page) -> LeafPage * { return reinterpret_cast<LeafPage *>(page->GetData()); }
-  // auto PageToI(Page *page) -> InternalPage * { return reinterpret_cast<InternalPage *>(page->GetData()); }
+  auto CastBPlusPage(Page *page) const -> BPlusTreePage * { return reinterpret_cast<BPlusTreePage *>(page->GetData()); }
+  auto CastLeafPage(Page *page) const -> LeafPage * { return reinterpret_cast<LeafPage *>(page->GetData()); }
+  auto CastInternalPage(Page *page) const -> InternalPage * {  return reinterpret_cast<InternalPage *>(page->GetData()); }
+
   auto CastLeafPage(BPlusTreePage *page) const -> LeafPage * { return static_cast<LeafPage *>(page); }
   auto CastInternalPage(BPlusTreePage *page) const -> InternalPage * { return static_cast<InternalPage *>(page); }
 
@@ -114,10 +115,16 @@ class BPlusTree {
   auto NewInternalPage(page_id_t *page_id, page_id_t parent_id) -> InternalPage *;
   auto NewInternalRootPage(page_id_t *page_id) -> InternalPage *;
 
-  auto FetchPage(page_id_t page_id) const -> BPlusTreePage *;
+  auto FetchBPage(page_id_t page_id) const -> BPlusTreePage *;
+
+  auto FetchPage(page_id_t page_id) const -> Page *;
+
   auto FetchChild(InternalPage *page, int index) const -> BPlusTreePage *;
 
+  auto FetchChildPage(InternalPage *page, int index) const -> Page *;
+
   auto FetchParent(BPlusTreePage *page) -> InternalPage *;
+
   auto FetchSibling(BPlusTreePage *page, int index) -> BPlusTreePage *;
 
   auto UnPinPage(BPlusTreePage *page, bool is_dirty) const;
