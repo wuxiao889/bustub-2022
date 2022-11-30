@@ -31,7 +31,7 @@ TEST(BPlusTreeTests, InsertTest1) {
   auto *disk_manager = new DiskManager("test.db");
   BufferPoolManager *bpm = new BufferPoolManagerInstance(50, disk_manager);
   // create b+ tree
-  BPlusTree<GenericKey<8>, RID, GenericComparator<8>> tree("foo_pk", bpm, comparator, 4, 4);
+  BPlusTree<GenericKey<8>, RID, GenericComparator<8>> tree("foo_pk", bpm, comparator);
   GenericKey<8> index_key;
   RID rid;
   // create transaction
@@ -43,7 +43,7 @@ TEST(BPlusTreeTests, InsertTest1) {
   (void)header_page;
 
   // TODO(wxx)  修改这里测试
-  int size = 100;
+  int size = 100000;
 
   std::vector<int64_t> keys(size);
 
@@ -65,7 +65,7 @@ TEST(BPlusTreeTests, InsertTest1) {
   std::vector<RID> rids;
 
   // std::shuffle(keys.begin(), keys.end(), g);
-  tree.Draw(bpm, "/home/wxx/bustub-private/build-vscode/bin/InsertTest_.dot");
+  // tree.Draw(bpm, "/home/wxx/bustub-private/build-vscode/bin/InsertTest_.dot");
 
   for (auto key : keys) {
     rids.clear();
@@ -83,8 +83,8 @@ TEST(BPlusTreeTests, InsertTest1) {
     i++;
     index_key.SetFromInteger(key);
     tree.Remove(index_key, transaction);
-    tree.Draw(bpm, "/home/wxx/bustub-private/build-vscode/bin/InsertTest_" + std::to_string(i) + "delete_" +
-                       std::to_string(index_key.ToString()) + ".dot");
+    // tree.Draw(bpm, "/home/wxx/bustub-private/build-vscode/bin/InsertTest_" + std::to_string(i) + "delete_" +
+    //                    std::to_string(index_key.ToString()) + ".dot");
   }
 
   EXPECT_EQ(true, tree.IsEmpty());
@@ -203,7 +203,7 @@ TEST(BPlusTreeTests, DISABLED_InsertTest3) {
     index_key.SetFromInteger(key);
     tree.Insert(index_key, rid, transaction);
   }
-  std::cout << tree.GetLevel() << std::endl;
+  // std::cout << tree.GetLevel() << std::endl;
 
   std::vector<RID> rids;
 

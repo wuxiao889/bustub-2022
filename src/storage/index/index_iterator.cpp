@@ -26,9 +26,9 @@ INDEXITERATOR_TYPE::IndexIterator(const IndexIterator &x)
     : page_(x.page_), position_(x.position_), buffer_pool_manager_(x.buffer_pool_manager_) {}
 
 INDEX_TEMPLATE_ARGUMENTS
-INDEXITERATOR_TYPE::~IndexIterator() { 
+INDEXITERATOR_TYPE::~IndexIterator() {
   page_->WUnlatch();
-  buffer_pool_manager_->UnpinPage(page_->GetPageId(), false); 
+  buffer_pool_manager_->UnpinPage(page_->GetPageId(), false);
 }
 
 INDEX_TEMPLATE_ARGUMENTS

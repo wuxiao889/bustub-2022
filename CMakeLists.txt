@@ -109,7 +109,7 @@ endif ()
 ######################################################################################################################
 message("${BUSTUB_SANITIZER} sanitizer before.")
 if (NOT BUSTUB_SANITIZER)
-    set(BUSTUB_SANITIZER thread)
+    set(BUSTUB_SANITIZER address)
 endif ()
 
 message("Build mode: ${CMAKE_BUILD_TYPE}")

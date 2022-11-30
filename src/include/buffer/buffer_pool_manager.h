@@ -84,7 +84,7 @@ class BufferPoolManager {
     GradingCallback(callback, CallbackType::AFTER, INVALID_PAGE_ID);
   }
 
-  virtual void CheckPinCount() = 0;
+  // virtual void CheckPinCount() = 0;
 
   /** @return size of the buffer pool */
   virtual auto GetPoolSize() -> size_t = 0;

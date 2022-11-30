@@ -44,7 +44,7 @@ class IndexIterator {
 
  private:
   // add your own private member variables here
-  Page* page_{};
+  Page *page_{};
   int position_{};
 
   BufferPoolManager *buffer_pool_manager_{};

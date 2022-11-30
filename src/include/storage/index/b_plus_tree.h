@@ -52,7 +52,7 @@ class BPlusTree {
   auto IsEmpty() const -> bool;
 
   // Insert a key-value pair into this B+ tree.
-  auto Insert(const KeyType &key, const ValueType &value, Transaction *transaction = nullptr) -> bool;
+  auto Insert(const KeyType &key, const ValueType &value, Transaction *transaction) -> bool;
 
   // Remove a key and its value from this B+ tree.
   void Remove(const KeyType &key, Transaction *transaction = nullptr);
@@ -86,11 +86,11 @@ class BPlusTree {
   auto IsSafeInsert(BPlusTreePage *page) -> bool;
   auto IsSafeRemove(BPlusTreePage *page) -> bool;
 
-  auto FindLeafPageOptimistic(const KeyType &key, Transaction *transaction) -> Page *;
   auto FindLeafPage(const KeyType &key, Transaction *transaction) -> Page *;
+  // auto FindLeafPageOptimistic(const KeyType &key, Transaction *transaction) -> Page *;
 
   auto InsertInLeaf(LeafPage *leaf_node, const KeyType &key, const ValueType &value) -> bool;
-  void InsertInParent(BPlusTreePage *left_page, BPlusTreePage *right_page, const KeyType &key, page_id_t value,
+  void InsertInParent(BPlusTreePage *left_node, BPlusTreePage *right_node, const KeyType &key, page_id_t value,
                       Transaction *transaction = nullptr);
 
   auto RemoveInLeaf(LeafPage *leaf_node, const KeyType &key) -> bool;
@@ -100,7 +100,7 @@ class BPlusTree {
   auto InsertPessimistic(const KeyType &key, const ValueType &value, Transaction *transaction) -> bool;
   auto RemovePessimistic(const KeyType &key, Transaction *transaction);
 
-  void RemoveInPage(BPlusTreePage *page, const KeyType &key, Transaction *transaction = nullptr);
+  void RemoveInPage(BPlusTreePage *page, const KeyType &key, Transaction *transaction);
 
   void BorrowFromLeft(BPlusTreePage *page, BPlusTreePage *left_page, int left_position, Transaction *transaction);
 
@@ -108,12 +108,8 @@ class BPlusTree {
 
   void FreePageSet(Transaction *transaction, bool is_dirty);
 
-  void Redistribute(BPlusTreePage *left_page, BPlusTreePage *right_page, int posOfLeftPage, int whichOneisCurBlock);
-
   // always merge right to left
-  void Merge(BPlusTreePage *leftpage, BPlusTreePage *rightpage, int posOfLeftPage, Transaction *transaction);
-
-  void SplitLeaf(LeafPage *page);
+  void Merge(BPlusTreePage *left_node, BPlusTreePage *right_node, int posOfLeftPage, Transaction *transaction);
 
   void UpdateChild(InternalPage *page, int first, int last);
 
@@ -122,7 +118,6 @@ class BPlusTree {
   auto CastInternalPage(Page *page) const -> InternalPage * {
     return reinterpret_cast<InternalPage *>(page->GetData());
   }
-
   auto CastLeafPage(BPlusTreePage *page) const -> LeafPage * { return static_cast<LeafPage *>(page); }
   auto CastInternalPage(BPlusTreePage *page) const -> InternalPage * { return static_cast<InternalPage *>(page); }
 
@@ -130,8 +125,6 @@ class BPlusTree {
   auto NewLeafRootPage(page_id_t *page_id) -> Page *;
   auto NewInternalPage(page_id_t *page_id, page_id_t parent_id) -> Page *;
   auto NewInternalRootPage(page_id_t *page_id) -> Page *;
-
-  auto FetchPage(page_id_t page_id) const -> Page *;
 
   auto FetchChildPage(InternalPage *page, int index) const -> Page *;
 

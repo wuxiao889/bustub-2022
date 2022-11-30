@@ -86,10 +86,6 @@ void B_PLUS_TREE_LEAF_PAGE_TYPE::Copy(const BPlusTreeLeafPage *src, int result, 
 
 INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_LEAF_PAGE_TYPE::LowerBound(const KeyType &key, const KeyComparator &cmp) const -> int {
-  // int res = std::lower_bound(array_, array_ + GetSize(), key,
-  //                            [&](const MappingType &x, const KeyType &key) { return cmp(x.first, key) == -1; }) -
-  //           array_;
-  // return res;
   int left = 0;
   int right = GetSize();
   while (left < right) {
