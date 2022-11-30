@@ -129,7 +129,6 @@ auto BufferPoolManagerInstance::FetchPgImp(page_id_t page_id) -> Page * {
 }
 
 auto BufferPoolManagerInstance::UnpinPgImp(page_id_t page_id, bool is_dirty) -> bool {
-  std::lock_guard lock(latch_);
   frame_id_t frame_id = -1;
   // If page_id is not in the buffer pool
   if (!page_table_->Find(page_id, frame_id)) {
@@ -137,6 +136,7 @@ auto BufferPoolManagerInstance::UnpinPgImp(page_id_t page_id, bool is_dirty) -> 
     return false;
   }
   Page *page = pages_ + frame_id;
+  std::lock_guard lock(latch_);
   // its pin count is already 0, return false.
   if (page->pin_count_ <= 0) {
     // LOG_DEBUG("page %d pin_count already <= 0!", page_id);
@@ -157,7 +157,6 @@ auto BufferPoolManagerInstance::UnpinPgImp(page_id_t page_id, bool is_dirty) -> 
 }
 
 auto BufferPoolManagerInstance::FlushPgImp(page_id_t page_id) -> bool {
-  std::lock_guard lock(latch_);
   frame_id_t frame_id = -1;
   // false if the page could not be found in the page table
   if (!page_table_->Find(page_id, frame_id)) {
@@ -165,6 +164,7 @@ auto BufferPoolManagerInstance::FlushPgImp(page_id_t page_id) -> bool {
     return false;
   }
   Page *page = pages_ + frame_id;
+  std::lock_guard lock(latch_);
   // Use the DiskManager::WritePage() method to flush a page to disk.
   disk_manager_->WritePage(page_id, page->data_);
   // Unset the dirty flag of the page after flushing.
@@ -192,6 +192,7 @@ auto BufferPoolManagerInstance::DeletePgImp(page_id_t page_id) -> bool {
     return true;
   }
   Page *page = pages_ + frame_id;
+  std::lock_guard lock(latch_);
   // If the page is pinned and cannot be deleted, return false immediately.
   if (page->pin_count_ > 0) {
     LOG_WARN("page %d pin_count %d !", page_id, page->pin_count_);
@@ -199,7 +200,6 @@ auto BufferPoolManagerInstance::DeletePgImp(page_id_t page_id) -> bool {
   }
   // After deleting the page from the page table, stop tracking the frame
   // in the replacer and add the frame back to the free list.
-  std::lock_guard lock(latch_);
   page_table_->Remove(page_id);
   replacer_->Remove(frame_id);
   free_list_.push_back(frame_id);

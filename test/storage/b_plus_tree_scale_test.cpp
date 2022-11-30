@@ -54,17 +54,18 @@ TEST(BPlusTreeTests, InsertTest1) {
   // std::shuffle(keys.begin(), keys.end(), g);
   int i = 0;
   for (auto key : keys) {
-    i++;
+    // i++;
     int64_t value = key & 0xFFFFFFFF;
     rid.Set(static_cast<int32_t>(key >> 32), value);
     index_key.SetFromInteger(key);
     tree.Insert(index_key, rid, transaction);
-    tree.Draw(bpm, "/home/wxx/bustub-private/build-vscode/bin/InsertTest_" + std::to_string(i) + ".dot");
+    // tree.Draw(bpm, "/home/wxx/bustub-private/build-vscode/bin/InsertTest_" + std::to_string(i) + ".dot");
   }
 
   std::vector<RID> rids;
 
-  std::shuffle(keys.begin(), keys.end(), g);
+  // std::shuffle(keys.begin(), keys.end(), g);
+  tree.Draw(bpm, "/home/wxx/bustub-private/build-vscode/bin/InsertTest_.dot");
 
   for (auto key : keys) {
     rids.clear();
@@ -76,16 +77,19 @@ TEST(BPlusTreeTests, InsertTest1) {
     EXPECT_EQ(rids[0].GetSlotNum(), value);
   }
 
-  std::shuffle(keys.begin(), keys.end(), g);
+  // std::shuffle(keys.begin(), keys.end(), g);
 
-  // for (auto key : keys) {
-  //   index_key.SetFromInteger(key);
-  //   tree.Remove(index_key, transaction);
-  // }
+  for (auto key : keys) {
+    i++;
+    index_key.SetFromInteger(key);
+    tree.Remove(index_key, transaction);
+    tree.Draw(bpm, "/home/wxx/bustub-private/build-vscode/bin/InsertTest_" + std::to_string(i) + "delete_" +
+                       std::to_string(index_key.ToString()) + ".dot");
+  }
 
-  // EXPECT_EQ(true, tree.IsEmpty());
+  EXPECT_EQ(true, tree.IsEmpty());
 
-  // bpm->UnpinPage(HEADER_PAGE_ID, true);
+  bpm->UnpinPage(HEADER_PAGE_ID, true);
 
   delete transaction;
   delete disk_manager;
@@ -94,7 +98,7 @@ TEST(BPlusTreeTests, InsertTest1) {
   remove("test.log");
 }
 
-TEST(BPlusTreeTests, InsertTest2) {
+TEST(BPlusTreeTests, DISABLED_InsertTest2) {
   // create KeyComparator and index schema
   auto key_schema = ParseCreateStatement("a bigint");
   GenericComparator<8> comparator(key_schema.get());
@@ -163,7 +167,7 @@ TEST(BPlusTreeTests, InsertTest2) {
   remove("test.log");
 }
 
-TEST(BPlusTreeTests, InsertTest3) {
+TEST(BPlusTreeTests, DISABLED_InsertTest3) {
   // create KeyComparator and index schema
   auto key_schema = ParseCreateStatement("a bigint");
   GenericComparator<8> comparator(key_schema.get());

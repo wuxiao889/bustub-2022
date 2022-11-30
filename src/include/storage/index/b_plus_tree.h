@@ -83,24 +83,35 @@ class BPlusTree {
   auto GetLevel() const -> int;
 
  private:
-  auto FindLeafPage(const KeyType &key, Transaction *transaction = nullptr) -> Page *;
+  auto IsSafeInsert(BPlusTreePage *page) -> bool;
+  auto IsSafeRemove(BPlusTreePage *page) -> bool;
+
+  auto FindLeafPageOptimistic(const KeyType &key, Transaction *transaction) -> Page *;
+  auto FindLeafPage(const KeyType &key, Transaction *transaction) -> Page *;
 
   auto InsertInLeaf(LeafPage *leaf_node, const KeyType &key, const ValueType &value) -> bool;
+  void InsertInParent(BPlusTreePage *left_page, BPlusTreePage *right_page, const KeyType &key, page_id_t value,
+                      Transaction *transaction = nullptr);
 
-  auto InsertPessimistic(const KeyType &key, const ValueType &value, Transaction *transaction = nullptr) -> bool;
+  auto RemoveInLeaf(LeafPage *leaf_node, const KeyType &key) -> bool;
 
-  auto IsSafe(BPlusTreePage *page) -> bool;
+  auto RemoveEntry(Page *page, const KeyType &key, int position, Transaction *transaction) -> bool;
+
+  auto InsertPessimistic(const KeyType &key, const ValueType &value, Transaction *transaction) -> bool;
+  auto RemovePessimistic(const KeyType &key, Transaction *transaction);
 
   void RemoveInPage(BPlusTreePage *page, const KeyType &key, Transaction *transaction = nullptr);
 
-  void BrowFromLeft();
+  void BorrowFromLeft(BPlusTreePage *page, BPlusTreePage *left_page, int left_position, Transaction *transaction);
 
-  void BrowFrowRight();
+  void BorrowFromRight(BPlusTreePage *page, BPlusTreePage *right_page, int left_position, Transaction *transaction);
+
+  void FreePageSet(Transaction *transaction, bool is_dirty);
 
   void Redistribute(BPlusTreePage *left_page, BPlusTreePage *right_page, int posOfLeftPage, int whichOneisCurBlock);
 
   // always merge right to left
-  void Merge(BPlusTreePage *leftpage, BPlusTreePage *rightpage, int posOfLeftPage);
+  void Merge(BPlusTreePage *leftpage, BPlusTreePage *rightpage, int posOfLeftPage, Transaction *transaction);
 
   void SplitLeaf(LeafPage *page);
 
@@ -120,26 +131,15 @@ class BPlusTree {
   auto NewInternalPage(page_id_t *page_id, page_id_t parent_id) -> Page *;
   auto NewInternalRootPage(page_id_t *page_id) -> Page *;
 
-  auto FetchBPage(page_id_t page_id) const -> BPlusTreePage *;
-
   auto FetchPage(page_id_t page_id) const -> Page *;
 
-  auto FetchChild(InternalPage *page, int index) const -> BPlusTreePage *;
-
   auto FetchChildPage(InternalPage *page, int index) const -> Page *;
-
-  auto FetchParentPage(BPlusTreePage *page) -> Page *;
-
-  auto FetchSibling(BPlusTreePage *page, int index) -> BPlusTreePage *;
 
   auto UnPinPage(BPlusTreePage *page, bool is_dirty) const;
 
   auto DeletePage(BPlusTreePage *page) const -> bool;
 
   auto CalcPositionInParent(BPlusTreePage *page, const KeyType &key, bool useKey) -> int;
-
-  void InsertInParent(BPlusTreePage *left_page, BPlusTreePage *right_page, const KeyType &key, page_id_t value,
-                      Transaction *transaction = nullptr);
 
   void UpdateRootPageId(int insert_record = 0);
   /* Debug Routines for FREE!! */
@@ -157,8 +157,9 @@ class BPlusTree {
 
   page_id_t left_most_;
   page_id_t right_most_;
+  bool is_empty_;
 
-  std::mutex latch_;      // guard root_page_id
+  std::mutex latch_;  // guard root_page_id
 };
 
 }  // namespace bustub
