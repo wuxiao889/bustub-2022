@@ -83,13 +83,18 @@ class BPlusTree {
   auto GetLevel() const -> int;
 
  private:
-  auto FindLeafPage(const KeyType &key,  Transaction *transaction = nullptr) -> Page *;
+  auto FindLeafPage(const KeyType &key, Transaction *transaction = nullptr) -> Page *;
 
-  auto InsertInPage(BPlusTreePage *page, const KeyType &key, const ValueType &value, Transaction *transaction = nullptr)
-      -> bool;
+  auto InsertInLeaf(LeafPage *leaf_node, const KeyType &key, const ValueType &value) -> bool;
+
+  auto InsertPessimistic(const KeyType &key, const ValueType &value, Transaction *transaction = nullptr) -> bool;
+
+  auto IsSafe(BPlusTreePage *page) -> bool;
 
   void RemoveInPage(BPlusTreePage *page, const KeyType &key, Transaction *transaction = nullptr);
+
   void BrowFromLeft();
+
   void BrowFrowRight();
 
   void Redistribute(BPlusTreePage *left_page, BPlusTreePage *right_page, int posOfLeftPage, int whichOneisCurBlock);
@@ -99,21 +104,21 @@ class BPlusTree {
 
   void SplitLeaf(LeafPage *page);
 
-  void SplitInternal(InternalPage *page);
-
   void UpdateChild(InternalPage *page, int first, int last);
 
   auto CastBPlusPage(Page *page) const -> BPlusTreePage * { return reinterpret_cast<BPlusTreePage *>(page->GetData()); }
   auto CastLeafPage(Page *page) const -> LeafPage * { return reinterpret_cast<LeafPage *>(page->GetData()); }
-  auto CastInternalPage(Page *page) const -> InternalPage * {  return reinterpret_cast<InternalPage *>(page->GetData()); }
+  auto CastInternalPage(Page *page) const -> InternalPage * {
+    return reinterpret_cast<InternalPage *>(page->GetData());
+  }
 
   auto CastLeafPage(BPlusTreePage *page) const -> LeafPage * { return static_cast<LeafPage *>(page); }
   auto CastInternalPage(BPlusTreePage *page) const -> InternalPage * { return static_cast<InternalPage *>(page); }
 
-  auto NewLeafPage(page_id_t *page_id, page_id_t parent_id) -> LeafPage *;
-  auto NewLeafRootPage(page_id_t *page_id) -> LeafPage *;
-  auto NewInternalPage(page_id_t *page_id, page_id_t parent_id) -> InternalPage *;
-  auto NewInternalRootPage(page_id_t *page_id) -> InternalPage *;
+  auto NewLeafPage(page_id_t *page_id, page_id_t parent_id) -> Page *;
+  auto NewLeafRootPage(page_id_t *page_id) -> Page *;
+  auto NewInternalPage(page_id_t *page_id, page_id_t parent_id) -> Page *;
+  auto NewInternalRootPage(page_id_t *page_id) -> Page *;
 
   auto FetchBPage(page_id_t page_id) const -> BPlusTreePage *;
 
@@ -123,7 +128,7 @@ class BPlusTree {
 
   auto FetchChildPage(InternalPage *page, int index) const -> Page *;
 
-  auto FetchParent(BPlusTreePage *page) -> InternalPage *;
+  auto FetchParentPage(BPlusTreePage *page) -> Page *;
 
   auto FetchSibling(BPlusTreePage *page, int index) -> BPlusTreePage *;
 
@@ -133,7 +138,8 @@ class BPlusTree {
 
   auto CalcPositionInParent(BPlusTreePage *page, const KeyType &key, bool useKey) -> int;
 
-  void InsertInParent(BPlusTreePage *left_page, BPlusTreePage *right_page, const KeyType &key, page_id_t value);
+  void InsertInParent(BPlusTreePage *left_page, BPlusTreePage *right_page, const KeyType &key, page_id_t value,
+                      Transaction *transaction = nullptr);
 
   void UpdateRootPageId(int insert_record = 0);
   /* Debug Routines for FREE!! */
@@ -148,10 +154,11 @@ class BPlusTree {
   KeyComparator comparator_;
   int leaf_max_size_;
   int internal_max_size_;
-  bool is_empty_;
 
   page_id_t left_most_;
   page_id_t right_most_;
+
+  std::mutex latch_;      // guard root_page_id
 };
 
 }  // namespace bustub
