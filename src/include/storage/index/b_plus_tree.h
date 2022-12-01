@@ -106,7 +106,7 @@ class BPlusTree {
 
   void UpdateChild(InternalPage *node, int first, int last);
 
-  void UnPinPageSet(Transaction *transaction, bool free_root = false);
+  void ClearPageSet(Transaction *transaction, bool free_root = false);
 
   auto CastBPlusPage(Page *page) const -> BPlusTreePage * { return reinterpret_cast<BPlusTreePage *>(page->GetData()); }
   auto CastLeafPage(Page *page) const -> LeafPage * { return reinterpret_cast<LeafPage *>(page->GetData()); }
