@@ -105,6 +105,17 @@ auto B_PLUS_TREE_LEAF_PAGE_TYPE::LowerBound(const KeyType &key, const KeyCompara
 }
 
 INDEX_TEMPLATE_ARGUMENTS
+auto B_PLUS_TREE_LEAF_PAGE_TYPE::GetValue(const KeyType &key, ValueType &value, const KeyComparator &comparator)
+    -> bool {
+  int index = LowerBound(key, comparator);
+  if (index < GetMaxSize() && comparator(key, KeyAt(index)) == 0) {
+    value = ValueAt(index);
+    return true;
+  }
+  return false;
+}
+
+INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_LEAF_PAGE_TYPE::InsertAt(int index, const KeyType &key, const ValueType &value) {
   BUSTUB_ASSERT(index <= GetSize(), "index <= GetSize()");
   array_[GetSize()] = MappingType{key, value};
@@ -112,6 +123,17 @@ void B_PLUS_TREE_LEAF_PAGE_TYPE::InsertAt(int index, const KeyType &key, const V
     std::swap(array_[j], array_[j - 1]);
   }
   IncreaseSize(1);
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+auto B_PLUS_TREE_LEAF_PAGE_TYPE::Insert(const KeyType &key, const ValueType &value, const KeyComparator &comparator)
+    -> bool {
+  int index = LowerBound(key, comparator);
+  if (index < GetSize() && comparator(KeyAt(index), key) == 0) {
+    return false;
+  }
+  InsertAt(index, key, value);
+  return true;
 }
 
 INDEX_TEMPLATE_ARGUMENTS

@@ -43,7 +43,7 @@ TEST(BPlusTreeTests, InsertTest1) {
   (void)header_page;
 
   // TODO(wxx)  修改这里测试
-  int size = 100000;
+  int size = 1000;
 
   std::vector<int64_t> keys(size);
 
@@ -52,7 +52,7 @@ TEST(BPlusTreeTests, InsertTest1) {
   std::random_device rd;
   std::mt19937 g(rd());
   // std::shuffle(keys.begin(), keys.end(), g);
-  int i = 0;
+  // int i = 0;
   for (auto key : keys) {
     // i++;
     int64_t value = key & 0xFFFFFFFF;

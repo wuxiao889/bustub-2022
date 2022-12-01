@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <algorithm>
 #include <cassert>
+#include <cstddef>
 #include <cstdio>
 #include <cstring>
 #include <iostream>
@@ -23,6 +24,7 @@
 #include "storage/page/b_plus_tree_page.h"
 #include "storage/page/hash_table_page_defs.h"
 #include "storage/page/header_page.h"
+#include "type/value.h"
 
 namespace bustub {
 
@@ -56,109 +58,150 @@ INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::GetValue(const KeyType &key, std::vector<ValueType> *result, Transaction *transaction) -> bool {
   // LOG_INFO("\033[1;34mGetValue %ld\033[0m", key.ToString());
   Page *page;
-  {
-    std::lock_guard lock(latch_);
-    if (IsEmpty()) {
-      return false;
-    }
-    page = buffer_pool_manager_->FetchPage(root_page_id_);
-  }
-  BPlusTreePage *node = CastBPlusPage(page);
-
-  bool find = false;
-  page->RLatch();
-
-  if (!node->IsRootPage()) {
-    page->RUnlatch();
-    buffer_pool_manager_->UnpinPage(page->GetPageId(), false);
-    return GetValue(key, result);
-  }
-
-  while (!node->IsLeafPage()) {
-    InternalPage *internal_node = CastInternalPage(node);
-    int index = internal_node->UpperBound(key, comparator_);
-    // LOG_INFO("lookup to page %d at index %d", page->GetPageId(), idx - 1);
-    Page *next_page = FetchChildPage(internal_node, index - 1);
-    next_page->RLatch();
-
-    page->RUnlatch();
-    buffer_pool_manager_->UnpinPage(page->GetPageId(), false);
-
-    BPlusTreePage *next_node = CastInternalPage(next_page);
-    node = next_node;
-    page = next_page;
+  bool root_locked;
+  page = FindLeafPage(key, Operation::FIND, true, root_locked, transaction).first;
+  if (page == nullptr) {
+    return false;
   }
 
   LeafPage *leaf_node = CastLeafPage(page);
-  int index = leaf_node->LowerBound(key, comparator_);
-
-  // LOG_INFO("lookup int leaf page %d at index %d", page->GetPageId(), index);
-  assert(index <= leaf_node->GetSize());
-
-  if (index < leaf_node->GetSize() && comparator_(leaf_node->KeyAt(index), key) == 0) {
-    // LOG_INFO("found");
-    result->emplace_back(leaf_node->ValueAt(index));
-    find = true;
-  } else {
-    // LOG_INFO("\033[1;31m key %ld not found leaf page %d at index %d \033[0m", key.ToString(), node->GetPageId(),
-    // index);
+  ValueType value;
+  bool find = leaf_node->GetValue(key, value, comparator_);
+  if (find) {
+    result->push_back(value);
   }
-
   page->RUnlatch();
   buffer_pool_manager_->UnpinPage(page->GetPageId(), false);
-
-  // buffer_pool_manager_->CheckPinCount();
+  assert(!root_locked);
   return find;
 }
 
 INDEX_TEMPLATE_ARGUMENTS
-auto BPLUSTREE_TYPE::FindLeafPage(const KeyType &key, Transaction *transaction) -> Page * {
-  Page *current_page = buffer_pool_manager_->FetchPage(root_page_id_);
-  current_page->RLatch();
+auto BPLUSTREE_TYPE::FindLeafPage(const KeyType &key, Operation operation, bool optimistic, bool &root_locked,
+                                  Transaction *transaction) -> std::pair<Page *, bool> {
+  Page *page{};
+  BPlusTreePage *node;
 
-  BPlusTreePage *node = CastBPlusPage(current_page);
+  if (operation == Operation::FIND) {
+    latch_.lock();
+    root_locked = true;
+    if (IsEmpty()) {
+      latch_.unlock();
+      root_locked = false;
+      return {nullptr, false};
+    }
+    page = buffer_pool_manager_->FetchPage(root_page_id_);
+    node = CastBPlusPage(page);
+    page->RLatch();
+    latch_.unlock();
+    root_locked = false;
 
-  while (!node->IsLeafPage()) {
-    InternalPage *i_node = CastInternalPage(node);
-    int idx = i_node->UpperBound(key, comparator_);
-    // LOG_INFO("lookup to page %d at index %d", page->GetPageId(), idx - 1);
-    Page *next_page = FetchChildPage(i_node, idx - 1);
-    next_page->RLatch();
+    while (!node->IsLeafPage()) {
+      InternalPage *internal_node = CastInternalPage(node);
+      int index = internal_node->UpperBound(key, comparator_);
+      // LOG_INFO("lookup to page %d at index %d", page->GetPageId(), idx - 1);
+      Page *next_page = FetchChildPage(internal_node, index - 1);
+      next_page->RLatch();
 
-    current_page->RUnlatch();
-    buffer_pool_manager_->UnpinPage(current_page->GetPageId(), false);
+      page->RUnlatch();
+      buffer_pool_manager_->UnpinPage(page->GetPageId(), false);
 
-    BPlusTreePage *next_node = CastInternalPage(next_page);
-    node = next_node;
-    current_page = next_page;
+      BPlusTreePage *next_node = CastInternalPage(next_page);
+      node = next_node;
+      page = next_page;
+    }
+    return {page, false};
   }
 
-  return current_page;
-}
-
-INDEX_TEMPLATE_ARGUMENTS
-auto BPLUSTREE_TYPE::FindLeafPageOptimistic(const KeyType &key, bool optimistic, bool getValue, bool &root_locked,
-                                            Transaction *transaction) -> Page * {
-  Page *page;
-  BPlusTreePage *node;
-  while (true) {
-    {
-      std::lock_guard lock(latch_);
-      page = buffer_pool_manager_->FetchPage(root_page_id_);
-      node = CastBPlusPage(page);
+  // root_page 安全前不能释放锁！！！！获取rootpage时一定要是安全的
+  // 乐观insert, root Rlatch ,
+  // 悲观insert, root Wlatch ,
+  latch_.lock();
+  root_locked = true;
+  if (IsEmpty()) {
+    if (operation == INSERT) {
+      page = NewLeafRootPage(&root_page_id_);
+    } else {
+      latch_.unlock();
+      root_locked = false;
+      return {nullptr, false};
     }
+  } else {
+    page = buffer_pool_manager_->FetchPage(root_page_id_);
+  }
+  node = CastBPlusPage(page);
 
-    if (optimistic) {
-      page->RLatch();
-      if (!node->IsRootPage()) {
-        page->RUnlatch();
+  if (optimistic) {
+    if (node->IsLeafPage()) {
+      // 当root 是leaf时，判断root安全插入才能释放锁
+      // 否则提前释放了锁，root在这一个insert中分裂， 而别的线程依旧在这个旧的root中插入
+      page->WLatch();
+      if (!IsSafe(node, operation)) {
+        page->WUnlatch();
+        latch_.unlock();
+        root_locked = false;
+        buffer_pool_manager_->UnpinPage(page->GetPageId(), false);
+        return {page, true};
       }
     } else {
-      page->WLatch();
+      page->RLatch();
     }
+    latch_.unlock();
+    root_locked = false;
+
+    while (!node->IsLeafPage()) {
+      InternalPage *internal_node = CastInternalPage(node);
+      int index = internal_node->Search(key, comparator_);
+      Page *next_page = FetchChildPage(internal_node, index);
+      BPlusTreePage *next_node = CastInternalPage(next_page);
+
+      if (next_node->GetParentPageId() != node->GetPageId()) {
+        next_node->SetParentPageId(node->GetPageId());
+      }
+
+      if (next_node->IsLeafPage()) {
+        next_page->WLatch();
+      } else {
+        next_page->RLatch();
+      }
+
+      page->RUnlatch();
+      buffer_pool_manager_->UnpinPage(page->GetPageId(), false);
+
+      node = next_node;
+      page = next_page;
+    }
+    return {page, false};
   }
 
-  return page;
+  // perssimistic
+  page->WLatch();
+  root_locked = true;
+  while (!node->IsLeafPage()) {
+    InternalPage *internal_node = CastInternalPage(node);
+    int index = internal_node->Search(key, comparator_);
+    Page *next_page = FetchChildPage(internal_node, index);
+    BPlusTreePage *next_node = CastInternalPage(next_page);
+    // LOG_INFO("lookup to page %d at index %d", page->GetPageId(), idx - 1);
+    next_page->WLatch();
+    transaction->AddIntoPageSet(page);
+
+    if (next_node->GetParentPageId() != node->GetPageId()) {
+      next_node->SetParentPageId(node->GetPageId());
+    }
+
+    if (IsSafe(next_node, operation)) {
+      FreePageSet(transaction, false);
+      if (root_locked) {
+        latch_.unlock();
+        root_locked = false;
+      }
+    }
+    node = next_node;
+    page = next_page;
+  }
+
+  return {page, false};
 }
 
 /*****************************************************************************
@@ -174,120 +217,47 @@ auto BPLUSTREE_TYPE::FindLeafPageOptimistic(const KeyType &key, bool optimistic,
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transaction *transaction) -> bool {
   // LOG_INFO("\033[1;34m %d insert %ld\033[0m", ::gettid(), key.ToString());
-  Page *page{};
-  BPlusTreePage *node;
+  bool root_locked = false;
+  auto [page, again] = FindLeafPage(key, INSERT, true, root_locked, transaction);
 
-  // root_page 安全前不能释放锁！！！！获取rootpage时一定要是安全的
-  // 乐观insert, root Rlatch ,
-  // 悲观insert, root Wlatch ,
-  {
-    latch_.lock();
-    if (IsEmpty()) {
-      page = NewLeafRootPage(&root_page_id_);
-    } else {
-      page = buffer_pool_manager_->FetchPage(root_page_id_);
-    }
-
-    node = CastBPlusPage(page);
-    if (node->IsLeafPage()) {
-      // 当root 是leaf时，判断root安全插入才能释放锁
-      // 否则提前释放了锁，root在这一个insert中分裂， 而别的线程依旧在这个旧的root中插入
-      page->WLatch();
-      if (!IsSafeInsert(node)) {
-        page->WUnlatch();
-        latch_.unlock();
-        buffer_pool_manager_->UnpinPage(page->GetPageId(), false);
-        return InsertPessimistic(key, value, transaction);
-      }
-    } else {
-      page->RLatch();
-    }
-    latch_.unlock();
-  }
-
-  while (!node->IsLeafPage()) {
-    InternalPage *internal_node = CastInternalPage(node);
-    // TODO(wxx) UpperBound 改 Lookup ， index-1放在函数里面
-    int index = internal_node->UpperBound(key, comparator_);
-
-    Page *next_page = FetchChildPage(internal_node, index - 1);
-    BPlusTreePage *next_node = CastInternalPage(next_page);
-
-    if (next_node->IsLeafPage()) {
-      next_page->WLatch();
-    } else {
-      next_page->RLatch();
-    }
-
-    page->RUnlatch();
-    buffer_pool_manager_->UnpinPage(page->GetPageId(), false);
-
-    node = next_node;
-    page = next_page;
+  if (again) {
+    assert(!root_locked);
+    return InsertPessimistic(key, value, transaction);
   }
 
   LeafPage *leaf_node = CastLeafPage(page);
 
-  if (IsSafeInsert(leaf_node)) {
-    bool inserted = InsertInLeaf(leaf_node, key, value);
+  if (IsSafe(leaf_node, INSERT)) {
+    bool inserted = leaf_node->Insert(key, value, comparator_);
     page->WUnlatch();
     buffer_pool_manager_->UnpinPage(page->GetPageId(), inserted);
-    // buffer_pool_manager_->CheckPinCount();
     return inserted;
   }
 
   // restart pessimistic
   page->WUnlatch();
   buffer_pool_manager_->UnpinPage(page->GetPageId(), false);
-
-  // buffer_pool_manager_->CheckPinCount();
   return InsertPessimistic(key, value, transaction);
 }
 
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::InsertPessimistic(const KeyType &key, const ValueType &value, Transaction *transaction) -> bool {
   // LOG_INFO("%d InsertPessimistic", ::gettid());
-  Page *page;
-  BPlusTreePage *node;
-
-  latch_.lock();
-  bool root_locked = true;
-  page = buffer_pool_manager_->FetchPage(root_page_id_);
-  node = CastBPlusPage(page);
-  page->WLatch();
-
-  while (!node->IsLeafPage()) {
-    InternalPage *internal_node = CastInternalPage(node);
-    int index = internal_node->UpperBound(key, comparator_);
-
-    Page *next_page = FetchChildPage(internal_node, index - 1);
-    BPlusTreePage *next_node = CastInternalPage(next_page);
-    // LOG_INFO("lookup to page %d at index %d", page->GetPageId(), idx - 1);
-
-    next_page->WLatch();
-    transaction->AddIntoPageSet(page);
-
-    if (IsSafeInsert(next_node)) {
-      FreePageSet(transaction, false);
-      if (root_locked) {
-        root_locked = false;
-        latch_.unlock();
-      }
-    }
-
-    node = next_node;
-    page = next_page;
+  bool root_locked = false;
+  auto [page, again] = FindLeafPage(key, INSERT, false, root_locked, transaction);
+  if (again) {
+    return InsertPessimistic(key, value, transaction);
   }
 
   LeafPage *leaf_node = CastLeafPage(page);
 
-  if (IsSafeInsert(leaf_node)) {
+  if (IsSafe(leaf_node, INSERT)) {
     if (leaf_node->IsRootPage()) {  // 如果叶子节点就是root
       latch_.unlock();
       root_locked = false;
     }
     FreePageSet(transaction, false);
-    bool inserted = InsertInLeaf(leaf_node, key, value);
+    bool inserted = leaf_node->Insert(key, value, comparator_);
     page->WUnlatch();
     buffer_pool_manager_->UnpinPage(page->GetPageId(), inserted);
     // buffer_pool_manager_->CheckPinCount();
@@ -296,7 +266,7 @@ auto BPLUSTREE_TYPE::InsertPessimistic(const KeyType &key, const ValueType &valu
   }
 
   // 直接插入，空间是足够的
-  bool inserted = InsertInLeaf(leaf_node, key, value);
+  bool inserted = leaf_node->Insert(key, value, comparator_);
   // 插入失败，重复了
   if (!inserted) {
     if (root_locked) {
@@ -343,17 +313,6 @@ auto BPLUSTREE_TYPE::InsertPessimistic(const KeyType &key, const ValueType &valu
   }
   // buffer_pool_manager_->CheckPinCount();
   assert(!root_locked);
-  return true;
-}
-
-INDEX_TEMPLATE_ARGUMENTS
-auto BPLUSTREE_TYPE::InsertInLeaf(LeafPage *leaf_node, const KeyType &key, const ValueType &value) -> bool {
-  int index = leaf_node->LowerBound(key, comparator_);
-  if (index < leaf_node->GetSize() && comparator_(leaf_node->KeyAt(index), key) == 0) {
-    // LOG_INFO("\033[1;31m %d key %ld insert fail !\033[0m", ::gettid(), key.ToString());
-    return false;
-  }
-  leaf_node->InsertAt(index, key, value);
   return true;
 }
 
@@ -406,7 +365,7 @@ void BPLUSTREE_TYPE::InsertInParent(BPlusTreePage *left_node, BPlusTreePage *rig
   }
 
   // parent有空位
-  if (IsSafeInsert(parent_node)) {
+  if (IsSafe(parent_node, INSERT)) {
     int index = parent_node->LowerBound(key, comparator_);
     assert(index > 0);
     parent_node->InsertAt(index, key, right_node->GetPageId());
@@ -448,7 +407,7 @@ void BPLUSTREE_TYPE::InsertInParent(BPlusTreePage *left_node, BPlusTreePage *rig
     parent_right_node->SetKeyAt(0, KeyType{});
 
     InsertInParent(parent_node, parent_right_node, key0, parent_right_node->GetPageId(), root_locked, transaction);
-    UnPinPage(parent_right_node, true);
+    buffer_pool_manager_->UnpinPage(parent_right_page_id, true);
   }
 
   transaction->AddIntoPageSet(parent_page);
@@ -468,55 +427,20 @@ INDEX_TEMPLATE_ARGUMENTS
 void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
   // LOG_INFO("\033[1;32mRemove %ld\033[0m", key.ToString());
 
-  Page *page{};
-  BPlusTreePage *node{};
+  bool root_locked = false;
+  auto [page, again] = FindLeafPage(key, REMOVE, true, root_locked, transaction);
 
-  {
-    latch_.lock();
-    if (IsEmpty()) {
-      latch_.unlock();
-      return;
+  if (page == nullptr) {
+    assert(!root_locked);
+    if (again) {
+      return RemovePessimistic(key, transaction);
     }
-    page = buffer_pool_manager_->FetchPage(root_page_id_);
-    node = CastBPlusPage(page);
-
-    if (node->IsLeafPage()) {
-      page->WLatch();
-      if (!IsSafeRemove(node)) {
-        page->WUnlatch();
-        latch_.unlock();
-        buffer_pool_manager_->UnpinPage(page->GetPageId(), false);
-        return RemovePessimistic(key, transaction);
-      }
-    } else {
-      page->RLatch();
-    }
-    latch_.unlock();
-  }
-
-  while (!node->IsLeafPage()) {
-    InternalPage *internal_node = CastInternalPage(node);
-    int index = internal_node->UpperBound(key, comparator_);
-
-    Page *next_page = FetchChildPage(internal_node, index - 1);
-    BPlusTreePage *next_node = CastInternalPage(next_page);
-
-    if (next_node->IsLeafPage()) {
-      next_page->WLatch();
-    } else {
-      next_page->RLatch();
-    }
-
-    page->RUnlatch();
-    UnPinPage(node, false);
-
-    node = next_node;
-    page = next_page;
+    return;
   }
 
   LeafPage *leaf_node = CastLeafPage(page);
 
-  if (IsSafeRemove(leaf_node)) {
+  if (IsSafe(leaf_node, REMOVE)) {
     bool removed = leaf_node->Remove(key, comparator_);
     page->WUnlatch();
     buffer_pool_manager_->UnpinPage(page->GetPageId(), removed);
@@ -532,41 +456,14 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
 
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::RemovePessimistic(const KeyType &key, Transaction *transaction) {
-  Page *page;
-  BPlusTreePage *node;
-
-  latch_.lock();
-  bool root_locked = true;
-  page = buffer_pool_manager_->FetchPage(root_page_id_);
-  node = CastBPlusPage(page);
-  page->WLatch();
-
-  while (!node->IsLeafPage()) {
-    InternalPage *internal_node = CastInternalPage(node);
-    int index = internal_node->UpperBound(key, comparator_);
-
-    Page *next_page = FetchChildPage(internal_node, index - 1);
-    BPlusTreePage *next_node = CastInternalPage(next_page);
-    // LOG_INFO("lookup to page %d at index %d", page->GetPageId(), idx - 1);
-
-    next_page->WLatch();
-    // TODO(wxx) error: Called C++ object pointer is null ????
-    transaction->AddIntoPageSet(page);
-
-    if (next_node->GetParentPageId() != node->GetPageId()) {
-      next_node->SetParentPageId(node->GetPageId());
+  bool root_locked = false;
+  auto [page, again] = FindLeafPage(key, REMOVE, false, root_locked, transaction);
+  if (page == nullptr) {
+    assert(!root_locked);
+    if (again) {
+      return Remove(key);
     }
-
-    if (IsSafeRemove(next_node)) {
-      FreePageSet(transaction, false);
-      if (root_locked) {
-        root_locked = false;
-        latch_.unlock();
-      }
-    }
-
-    node = next_node;
-    page = next_page;
+    return;
   }
 
   // size < min_size
@@ -599,7 +496,7 @@ auto BPLUSTREE_TYPE::RemoveEntry(Page *page, const KeyType &key, int position, b
     LeafPage *leaf_node = CastLeafPage(page);
 
     // 再次判断能否安全移除不会
-    if (IsSafeRemove(leaf_node)) {
+    if (IsSafe(leaf_node, REMOVE)) {
       if (leaf_node->IsRootPage()) {
         latch_.unlock();
         root_locked = false;
@@ -641,13 +538,13 @@ auto BPLUSTREE_TYPE::RemoveEntry(Page *page, const KeyType &key, int position, b
     } else {
       InternalPage *internal_node = CastInternalPage(node);
       if (internal_node->GetSize() == 1) {
-        root_page_id_ = internal_node->ValueAt(0);
+        Page *new_root_page = FetchChildPage(internal_node, 0);
+        root_page_id_ = new_root_page->GetPageId();
         UpdateRootPageId();
 
-        Page *new_root_page = FetchChildPage(internal_node, 0);
         BPlusTreePage *new_root_node = CastBPlusPage(new_root_page);
         new_root_node->SetParentPageId(INVALID_PAGE_ID);
-        UnPinPage(new_root_node, true);
+        buffer_pool_manager_->UnpinPage(root_page_id_, true);
 
         left_most_ = right_most_ = root_page_id_;
         transaction->AddIntoDeletedPageSet(internal_node->GetPageId());
@@ -710,14 +607,14 @@ auto BPLUSTREE_TYPE::RemoveEntry(Page *page, const KeyType &key, int position, b
 }
 
 INDEX_TEMPLATE_ARGUMENTS
-void BPLUSTREE_TYPE::BorrowFromLeft(BPlusTreePage *page, BPlusTreePage *left_page, int left_position,
+void BPLUSTREE_TYPE::BorrowFromLeft(BPlusTreePage *node, BPlusTreePage *leftnode, int left_position,
                                     Transaction *transaction) {
   Page *parent_page = transaction->GetPageSet()->back();
   InternalPage *parent_node = CastInternalPage(parent_page);
 
-  if (page->IsLeafPage()) {
-    LeafPage *left_node = CastLeafPage(left_page);
-    LeafPage *right_node = CastLeafPage(page);
+  if (node->IsLeafPage()) {
+    LeafPage *left_node = CastLeafPage(leftnode);
+    LeafPage *right_node = CastLeafPage(node);
 
     right_node->ShiftRight();                                             // shift right to make space
     right_node->SetKeyAt(0, left_node->KeyAt(left_node->GetSize() - 1));  // borrow last fram left
@@ -726,8 +623,8 @@ void BPLUSTREE_TYPE::BorrowFromLeft(BPlusTreePage *page, BPlusTreePage *left_pag
 
     parent_node->SetKeyAt(left_position + 1, right_node->KeyAt(0));
   } else {
-    InternalPage *left_node = CastInternalPage(left_page);
-    InternalPage *right_node = CastInternalPage(page);
+    InternalPage *left_node = CastInternalPage(leftnode);
+    InternalPage *right_node = CastInternalPage(node);
 
     right_node->ShiftRight();
     right_node->SetKeyAt(1, parent_node->KeyAt(left_position + 1));           // bring down the key  from parent
@@ -747,13 +644,13 @@ void BPLUSTREE_TYPE::BorrowFromLeft(BPlusTreePage *page, BPlusTreePage *left_pag
 }
 
 INDEX_TEMPLATE_ARGUMENTS
-void BPLUSTREE_TYPE::BorrowFromRight(BPlusTreePage *page, BPlusTreePage *right_page, int left_position,
+void BPLUSTREE_TYPE::BorrowFromRight(BPlusTreePage *node, BPlusTreePage *rightnode, int left_position,
                                      Transaction *transaction) {
   Page *parent_page = transaction->GetPageSet()->back();
   InternalPage *parent_node = CastInternalPage(parent_page);
-  if (page->IsLeafPage()) {
-    LeafPage *left_node = CastLeafPage(page);
-    LeafPage *right_node = CastLeafPage(right_page);
+  if (node->IsLeafPage()) {
+    LeafPage *left_node = CastLeafPage(node);
+    LeafPage *right_node = CastLeafPage(rightnode);
 
     left_node->SetKeyAt(left_node->GetSize(), right_node->KeyAt(0));  // borrow the first pair from right
     left_node->SetValueAt(left_node->GetSize(), right_node->ValueAt(0));
@@ -762,8 +659,8 @@ void BPLUSTREE_TYPE::BorrowFromRight(BPlusTreePage *page, BPlusTreePage *right_p
 
     parent_node->SetKeyAt(left_position + 1, right_node->KeyAt(0));  // shift left by one in right
   } else {
-    InternalPage *left_node = CastInternalPage(page);
-    InternalPage *right_node = CastInternalPage(right_page);
+    InternalPage *left_node = CastInternalPage(node);
+    InternalPage *right_node = CastInternalPage(rightnode);
 
     // bring down the right key from parent
     left_node->SetKeyAt(left_node->GetSize(), parent_node->KeyAt(left_position + 1));
@@ -786,9 +683,8 @@ INDEX_TEMPLATE_ARGUMENTS
 void BPLUSTREE_TYPE::Merge(BPlusTreePage *left_node, BPlusTreePage *right_node, int posOfLeftPage, bool &root_locked,
                            Transaction *transaction) {
   // LOG_INFO("Merge page %d %d pos_of_left %d", left->GetPageId(), right->GetPageId(), posOfLeftPage);
-  Page *parent_page = transaction->GetPageSet()->back();
+  Page *parent_page = buffer_pool_manager_->FetchPage(left_node->GetParentPageId());
   InternalPage *parent_node = CastInternalPage(parent_page);
-  parent_page = buffer_pool_manager_->FetchPage(parent_page->GetPageId());
 
   if (left_node->IsLeafPage()) {
     LeafPage *left_leaf_node = CastLeafPage(left_node);
@@ -811,24 +707,22 @@ void BPLUSTREE_TYPE::Merge(BPlusTreePage *left_node, BPlusTreePage *right_node, 
     // UpdateChild(left_internal_node, old_size, left_node->GetSize());
   }
   transaction->AddIntoDeletedPageSet(right_node->GetPageId());
+
   transaction->GetPageSet()->pop_back();
-
   bool removed = RemoveEntry(parent_page, KeyType{}, posOfLeftPage + 1, root_locked, transaction);
-  assert(removed);
-  buffer_pool_manager_->UnpinPage(parent_page->GetPageId(), removed);
-
   transaction->AddIntoPageSet(parent_page);
+  buffer_pool_manager_->UnpinPage(parent_page->GetPageId(), removed);
 }
 
 INDEX_TEMPLATE_ARGUMENTS
-void BPLUSTREE_TYPE::UpdateChild(InternalPage *page, int first, int last) {
+void BPLUSTREE_TYPE::UpdateChild(InternalPage *node, int first, int last) {
   for (int i = first; i < last; i++) {
-    Page *child_page = FetchChildPage(page, i);
+    Page *child_page = FetchChildPage(node, i);
     // child_page->WLatch();
     BPlusTreePage *child_node = CastBPlusPage(child_page);
-    child_node->SetParentPageId(page->GetPageId());
+    child_node->SetParentPageId(node->GetPageId());
     // child_page->WUnlatch();
-    UnPinPage(child_node, true);
+    buffer_pool_manager_->UnpinPage(child_node->GetPageId(), true);
   }
 }
 
@@ -842,8 +736,14 @@ void BPLUSTREE_TYPE::UpdateChild(InternalPage *page, int first, int last) {
  */
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::Begin() -> INDEXITERATOR_TYPE {
+  latch_.lock();
+  if (IsEmpty()) {
+    latch_.unlock();
+    return End();
+  }
   Page *page = buffer_pool_manager_->FetchPage(left_most_);
   page->RLatch();
+  latch_.unlock();
   return Iterator{page, 0, buffer_pool_manager_};
 }
 
@@ -879,7 +779,7 @@ auto BPLUSTREE_TYPE::Begin(const KeyType &key) -> INDEXITERATOR_TYPE {
     next_page->RLatch();
 
     page->RUnlatch();
-    UnPinPage(node, false);
+    buffer_pool_manager_->UnpinPage(page->GetPageId(), false);
 
     BPlusTreePage *next_node = CastInternalPage(next_page);
     node = next_node;
@@ -908,6 +808,10 @@ auto BPLUSTREE_TYPE::Begin(const KeyType &key) -> INDEXITERATOR_TYPE {
  */
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::End() -> INDEXITERATOR_TYPE {
+  std::lock_guard lock(latch_);
+  if (IsEmpty()) {
+    return {nullptr, 0, nullptr};
+  }
   Page *page = buffer_pool_manager_->FetchPage(right_most_);
   BPlusTreePage *node = CastBPlusPage(page);
   page->RLatch();
@@ -1178,40 +1082,11 @@ auto BPLUSTREE_TYPE::FetchChildPage(InternalPage *node, int index) const -> Page
 }
 
 INDEX_TEMPLATE_ARGUMENTS
-auto BPLUSTREE_TYPE::UnPinPage(BPlusTreePage *node, bool is_dirty) const {
-  buffer_pool_manager_->UnpinPage(node->GetPageId(), is_dirty);
-}
-
-INDEX_TEMPLATE_ARGUMENTS
-auto BPLUSTREE_TYPE::DeletePage(BPlusTreePage *node) const -> bool {
-  return buffer_pool_manager_->DeletePage(node->GetPageId());
-}
-
-// INDEX_TEMPLATE_ARGUMENTS
-// auto BPLUSTREE_TYPE::GetLevel() const -> int {
-// }
-
-/**
- * @brief leaf < maxsize - 1 or internal < maxsize
- */
-INDEX_TEMPLATE_ARGUMENTS
-auto BPLUSTREE_TYPE::IsSafeInsert(BPlusTreePage *node) -> bool {
-  if (node->IsLeafPage()) {
-    return node->GetSize() < node->GetMaxSize() - 1;
+auto BPLUSTREE_TYPE::IsSafe(BPlusTreePage *node, Operation operation) -> bool {
+  if (operation == Operation::INSERT) {
+    return node->IsLeafPage() ? node->GetSize() < node->GetMaxSize() - 1 : node->GetSize() < node->GetMaxSize();
   }
-  return node->GetSize() < node->GetMaxSize();
-}
-
-/**
- * @brief it means the page will not coalesce after remove.
- *        if page is root_page return true, otherwise return size > minSize.
- */
-INDEX_TEMPLATE_ARGUMENTS
-auto BPLUSTREE_TYPE::IsSafeRemove(BPlusTreePage *node) -> bool {
-  if (node->IsRootPage()) {
-    return node->GetSize() > 1;
-  }
-  return node->GetSize() > node->GetMinSize();
+  return node->IsRootPage() ? node->GetSize() > 1 : node->GetSize() > node->GetMinSize();
 }
 
 INDEX_TEMPLATE_ARGUMENTS

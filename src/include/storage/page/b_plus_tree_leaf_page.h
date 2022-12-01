@@ -56,8 +56,12 @@ class BPlusTreeLeafPage : public BPlusTreePage {
   void SetValueAt(int index, const ValueType &value);
 
   void InsertAt(int index, const KeyType &key, const ValueType &value);
+  auto Insert(const KeyType &key, const ValueType &value, const KeyComparator &comparator) -> bool;
+
   auto Remove(const KeyType &key, const KeyComparator &comparator) -> bool;
   auto LowerBound(const KeyType &key, const KeyComparator &comparator) const -> int;
+
+  auto GetValue(const KeyType &key, ValueType &value, const KeyComparator &comparator) -> bool;
 
   auto operator[](int index) -> MappingType & { return array_[index]; }
 

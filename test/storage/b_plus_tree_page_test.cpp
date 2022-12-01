@@ -20,7 +20,7 @@ TEST(BPlusTreePageTests, InternalPageTest) {
 
   // x 1 2 3 4 5 6 7 8 9//
   for (int i = 0; i < 10; ++i) {
-    page->InsertAT(i, i, i);
+    page->InsertAt(i, i, i);
     EXPECT_EQ(i, page->ValueAt(i));
   }
   EXPECT_EQ(10, page->GetSize());
@@ -33,7 +33,7 @@ TEST(BPlusTreePageTests, InternalPageTest) {
   EXPECT_EQ(10, index);
 
   // x 0 1 2 3 4 5 6 7 8 9//
-  page->InsertAT(0, -1, -1);
+  page->InsertAt(0, -1, -1);
   EXPECT_EQ(-1, page->ValueAt(0));
 
   for (int i = 1; i < 11; ++i) {

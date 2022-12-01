@@ -227,7 +227,7 @@ TEST(BPlusTreeConcurrentTest, DeleteTest1) {
   InsertHelper(&tree, keys);
 
   std::vector<int64_t> remove_keys = keys;
-  LaunchParallelTest(3, DeleteHelper, &tree, remove_keys);
+  LaunchParallelTest(4, DeleteHelper, &tree, remove_keys);
 
   // int64_t start_key = 2;
   // int64_t current_key = start_key;

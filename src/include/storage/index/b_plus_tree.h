@@ -44,7 +44,7 @@ class BPlusTree {
   using LeafPage = BPlusTreeLeafPage<KeyType, ValueType, KeyComparator>;
   using Iterator = IndexIterator<KeyType, ValueType, KeyComparator>;
 
-  enum class Operation { FIND, INSERT, DELETE };
+  enum Operation { FIND, INSERT, REMOVE };
 
  public:
   explicit BPlusTree(std::string name, BufferPoolManager *buffer_pool_manager, const KeyComparator &comparator,
@@ -85,13 +85,12 @@ class BPlusTree {
   auto GetLevel() const -> int;
 
  private:
+  auto IsSafe(BPlusTreePage *node, Operation operation) -> bool;
   auto IsSafeInsert(BPlusTreePage *node) -> bool;
   auto IsSafeRemove(BPlusTreePage *node) -> bool;
 
-  auto FindLeafPage(const KeyType &key, Transaction *transaction) -> Page *;
-
-  auto FindLeafPageOptimistic(const KeyType &key, bool optimistic, bool getValue, bool &root_locked,
-                              Transaction *transaction) -> Page *;
+  auto FindLeafPage(const KeyType &key, Operation operation, bool optimistic, bool &root_locked,
+                    Transaction *transaction) -> std::pair<Page *, bool>;
 
   auto InsertInLeaf(LeafPage *leaf_node, const KeyType &key, const ValueType &value) -> bool;
   void InsertInParent(BPlusTreePage *left_node, BPlusTreePage *right_node, const KeyType &key, page_id_t value,
@@ -106,9 +105,9 @@ class BPlusTree {
 
   void RemoveInPage(BPlusTreePage *node, const KeyType &key, Transaction *transaction);
 
-  void BorrowFromLeft(BPlusTreePage *node, BPlusTreePage *left_node, int left_position, Transaction *transaction);
+  void BorrowFromLeft(BPlusTreePage *node, BPlusTreePage *leftnode, int left_position, Transaction *transaction);
 
-  void BorrowFromRight(BPlusTreePage *node, BPlusTreePage *right_node, int left_position, Transaction *transaction);
+  void BorrowFromRight(BPlusTreePage *node, BPlusTreePage *rightnode, int left_position, Transaction *transaction);
 
   void FreePageSet(Transaction *transaction, bool is_dirty);
 
@@ -155,7 +154,6 @@ class BPlusTree {
 
   page_id_t left_most_;
   page_id_t right_most_;
-  bool is_empty_;
 
   std::mutex latch_;  // guard root_page_id
 };
