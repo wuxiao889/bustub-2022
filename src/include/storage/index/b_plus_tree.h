@@ -44,6 +44,8 @@ class BPlusTree {
   using LeafPage = BPlusTreeLeafPage<KeyType, ValueType, KeyComparator>;
   using Iterator = IndexIterator<KeyType, ValueType, KeyComparator>;
 
+  enum class Operation { FIND, INSERT, DELETE };
+
  public:
   explicit BPlusTree(std::string name, BufferPoolManager *buffer_pool_manager, const KeyComparator &comparator,
                      int leaf_max_size = LEAF_PAGE_SIZE, int internal_max_size = INTERNAL_PAGE_SIZE);
@@ -83,15 +85,16 @@ class BPlusTree {
   auto GetLevel() const -> int;
 
  private:
-  auto IsSafeInsert(BPlusTreePage *page) -> bool;
-  auto IsSafeRemove(BPlusTreePage *page) -> bool;
+  auto IsSafeInsert(BPlusTreePage *node) -> bool;
+  auto IsSafeRemove(BPlusTreePage *node) -> bool;
 
   auto FindLeafPage(const KeyType &key, Transaction *transaction) -> Page *;
-  // auto FindLeafPageOptimistic(const KeyType &key, Transaction *transaction) -> Page *;
+
+  auto FindLeafPageOptimistic(const KeyType &key, bool optimistic, bool getValue, Transaction *transaction) -> Page *;
 
   auto InsertInLeaf(LeafPage *leaf_node, const KeyType &key, const ValueType &value) -> bool;
   void InsertInParent(BPlusTreePage *left_node, BPlusTreePage *right_node, const KeyType &key, page_id_t value,
-                      Transaction *transaction = nullptr);
+                      bool& root_locked, Transaction *transaction = nullptr);
 
   auto RemoveInLeaf(LeafPage *leaf_node, const KeyType &key) -> bool;
 
@@ -100,37 +103,37 @@ class BPlusTree {
   auto InsertPessimistic(const KeyType &key, const ValueType &value, Transaction *transaction) -> bool;
   auto RemovePessimistic(const KeyType &key, Transaction *transaction);
 
-  void RemoveInPage(BPlusTreePage *page, const KeyType &key, Transaction *transaction);
+  void RemoveInPage(BPlusTreePage *node, const KeyType &key, Transaction *transaction);
 
-  void BorrowFromLeft(BPlusTreePage *page, BPlusTreePage *left_page, int left_position, Transaction *transaction);
+  void BorrowFromLeft(BPlusTreePage *node, BPlusTreePage *left_node, int left_position, Transaction *transaction);
 
-  void BorrowFromRight(BPlusTreePage *page, BPlusTreePage *right_page, int left_position, Transaction *transaction);
+  void BorrowFromRight(BPlusTreePage *node, BPlusTreePage *right_node, int left_position, Transaction *transaction);
 
   void FreePageSet(Transaction *transaction, bool is_dirty);
 
   // always merge right to left
   void Merge(BPlusTreePage *left_node, BPlusTreePage *right_node, int posOfLeftPage, Transaction *transaction);
 
-  void UpdateChild(InternalPage *page, int first, int last);
+  void UpdateChild(InternalPage *node, int first, int last);
 
   auto CastBPlusPage(Page *page) const -> BPlusTreePage * { return reinterpret_cast<BPlusTreePage *>(page->GetData()); }
   auto CastLeafPage(Page *page) const -> LeafPage * { return reinterpret_cast<LeafPage *>(page->GetData()); }
   auto CastInternalPage(Page *page) const -> InternalPage * {
     return reinterpret_cast<InternalPage *>(page->GetData());
   }
-  auto CastLeafPage(BPlusTreePage *page) const -> LeafPage * { return static_cast<LeafPage *>(page); }
-  auto CastInternalPage(BPlusTreePage *page) const -> InternalPage * { return static_cast<InternalPage *>(page); }
+  auto CastLeafPage(BPlusTreePage *node) const -> LeafPage * { return static_cast<LeafPage *>(node); }
+  auto CastInternalPage(BPlusTreePage *node) const -> InternalPage * { return static_cast<InternalPage *>(node); }
 
   auto NewLeafPage(page_id_t *page_id, page_id_t parent_id) -> Page *;
   auto NewLeafRootPage(page_id_t *page_id) -> Page *;
   auto NewInternalPage(page_id_t *page_id, page_id_t parent_id) -> Page *;
   auto NewInternalRootPage(page_id_t *page_id) -> Page *;
 
-  auto FetchChildPage(InternalPage *page, int index) const -> Page *;
+  auto FetchChildPage(InternalPage *node, int index) const -> Page *;
 
-  auto UnPinPage(BPlusTreePage *page, bool is_dirty) const;
+  auto UnPinPage(BPlusTreePage *node, bool is_dirty) const;
 
-  auto DeletePage(BPlusTreePage *page) const -> bool;
+  auto DeletePage(BPlusTreePage *node) const -> bool;
 
   auto CalcPositionInParent(BPlusTreePage *page, const KeyType &key, bool useKey) -> int;
 
