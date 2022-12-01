@@ -502,6 +502,11 @@ auto BPLUSTREE_TYPE::RemoveEntry(Page *page, const KeyType &key, int position, b
     LeafPage *leaf_node = CastLeafPage(page);
 
     if (IsSafe(leaf_node, REMOVE)) {
+      ClearPageSet(transaction);
+      if(root_locked){
+        latch_.unlock();
+        root_locked = false;
+      }
       removed = leaf_node->Remove(key, comparator_);
       return removed;
     }
@@ -584,7 +589,9 @@ auto BPLUSTREE_TYPE::RemoveEntry(Page *page, const KeyType &key, int position, b
         Merge(node, right_node, node_position, root_locked, transaction);
         right_page->WUnlatch();
         buffer_pool_manager_->UnpinPage(right_page->GetPageId(), false);
-        transaction->AddIntoDeletedPageSet(right_page->GetPageId());
+        // transaction->AddIntoDeletedPageSet(right_page->GetPageId());
+        // bool removed = buffer_pool_manager_->DeletePage(right_page->GetPageId());
+        // assert(removed);
       }
 
     } else {
