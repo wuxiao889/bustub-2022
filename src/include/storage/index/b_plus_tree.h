@@ -90,15 +90,16 @@ class BPlusTree {
 
   auto FindLeafPage(const KeyType &key, Transaction *transaction) -> Page *;
 
-  auto FindLeafPageOptimistic(const KeyType &key, bool optimistic, bool getValue, Transaction *transaction) -> Page *;
+  auto FindLeafPageOptimistic(const KeyType &key, bool optimistic, bool getValue, bool &root_locked,
+                              Transaction *transaction) -> Page *;
 
   auto InsertInLeaf(LeafPage *leaf_node, const KeyType &key, const ValueType &value) -> bool;
   void InsertInParent(BPlusTreePage *left_node, BPlusTreePage *right_node, const KeyType &key, page_id_t value,
-                      bool& root_locked, Transaction *transaction = nullptr);
+                      bool &root_locked, Transaction *transaction = nullptr);
 
   auto RemoveInLeaf(LeafPage *leaf_node, const KeyType &key) -> bool;
 
-  auto RemoveEntry(Page *page, const KeyType &key, int position, Transaction *transaction) -> bool;
+  auto RemoveEntry(Page *page, const KeyType &key, int position, bool &root_locked, Transaction *transaction) -> bool;
 
   auto InsertPessimistic(const KeyType &key, const ValueType &value, Transaction *transaction) -> bool;
   auto RemovePessimistic(const KeyType &key, Transaction *transaction);
@@ -112,7 +113,8 @@ class BPlusTree {
   void FreePageSet(Transaction *transaction, bool is_dirty);
 
   // always merge right to left
-  void Merge(BPlusTreePage *left_node, BPlusTreePage *right_node, int posOfLeftPage, Transaction *transaction);
+  void Merge(BPlusTreePage *left_node, BPlusTreePage *right_node, int posOfLeftPage, bool &root_locked,
+             Transaction *transaction);
 
   void UpdateChild(InternalPage *node, int first, int last);
 

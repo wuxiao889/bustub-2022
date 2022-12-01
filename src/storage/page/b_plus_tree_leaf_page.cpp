@@ -72,25 +72,30 @@ INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_LEAF_PAGE_TYPE::SetValueAt(int index, const ValueType &value) { array_[index].second = value; }
 
 INDEX_TEMPLATE_ARGUMENTS
-void B_PLUS_TREE_LEAF_PAGE_TYPE::ShiftLeft(int i) { std::copy(array_ + i + 1, array_ + GetSize(), array_ + i); }
+void B_PLUS_TREE_LEAF_PAGE_TYPE::ShiftLeft(int i) {
+  std::copy(array_ + i + 1, array_ + GetSize(), array_ + i);
+  IncreaseSize(-1);
+}
 
 INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_LEAF_PAGE_TYPE::ShiftRight() {
   std::copy_backward(array_, array_ + GetSize(), array_ + 1 + GetSize());
+  IncreaseSize(1);
 }
 
 INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_LEAF_PAGE_TYPE::Copy(const BPlusTreeLeafPage *src, int result, int first, int last) {
   std::copy(src->array_ + first, src->array_ + last, array_ + result);
+  IncreaseSize(last - first);
 }
 
 INDEX_TEMPLATE_ARGUMENTS
-auto B_PLUS_TREE_LEAF_PAGE_TYPE::LowerBound(const KeyType &key, const KeyComparator &cmp) const -> int {
+auto B_PLUS_TREE_LEAF_PAGE_TYPE::LowerBound(const KeyType &key, const KeyComparator &comparator) const -> int {
   int left = 0;
   int right = GetSize();
   while (left < right) {
     int mid = (left + right) / 2;
-    if (cmp(array_[mid].first, key) >= 0) {
+    if (comparator(array_[mid].first, key) >= 0) {
       right = mid;
     } else {
       left = mid + 1;
@@ -100,13 +105,25 @@ auto B_PLUS_TREE_LEAF_PAGE_TYPE::LowerBound(const KeyType &key, const KeyCompara
 }
 
 INDEX_TEMPLATE_ARGUMENTS
-void B_PLUS_TREE_LEAF_PAGE_TYPE::InsertAndIncrease(int index, const KeyType &key, const ValueType &value) {
+void B_PLUS_TREE_LEAF_PAGE_TYPE::InsertAt(int index, const KeyType &key, const ValueType &value) {
   BUSTUB_ASSERT(index <= GetSize(), "index <= GetSize()");
   array_[GetSize()] = MappingType{key, value};
   for (int j = GetSize(); j > index; --j) {
     std::swap(array_[j], array_[j - 1]);
   }
   IncreaseSize(1);
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+auto B_PLUS_TREE_LEAF_PAGE_TYPE::Remove(const KeyType &key, const KeyComparator &comparator) -> bool {
+  int index = LowerBound(key, comparator);
+  if (index < GetSize() && comparator(KeyAt(index), key) == 0) {
+    // LOG_INFO("in child page %d index %d delete", leaf_page->GetPageId(), index);
+    ShiftLeft(index);
+    return true;
+  }
+  // LOG_INFO("\033[1;31m key %ld not found \033[0m", key.ToString());
+  return false;
 }
 
 template class BPlusTreeLeafPage<GenericKey<4>, RID, GenericComparator<4>>;

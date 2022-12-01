@@ -94,21 +94,27 @@ auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::LowerBound(const KeyType &key, const KeyCom
 }
 
 INDEX_TEMPLATE_ARGUMENTS
-void B_PLUS_TREE_INTERNAL_PAGE_TYPE::ShiftLeft(int i) { std::copy(array_ + i + 1, array_ + GetSize(), array_ + i); }
+void B_PLUS_TREE_INTERNAL_PAGE_TYPE::ShiftLeft(int i) {
+  std::copy(array_ + i + 1, array_ + GetSize(), array_ + i);
+  IncreaseSize(-1);
+}
 
 INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_INTERNAL_PAGE_TYPE::ShiftRight() {
   std::copy_backward(array_, array_ + GetSize(), array_ + 1 + GetSize());
+  IncreaseSize(1);
 }
 
 INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_INTERNAL_PAGE_TYPE::Copy(const BPlusTreeInternalPage *src, int result, int first, int last) {
   std::copy(src->array_ + first, src->array_ + last, array_ + result);
+  IncreaseSize(last - first);
 }
 
 INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_INTERNAL_PAGE_TYPE::Copy(const std::vector<MappingType> &src, int result, int first, int last) {
   std::copy(src.data() + first, src.data() + last, array_ + result);
+  IncreaseSize(last - first);
 }
 
 INDEX_TEMPLATE_ARGUMENTS
@@ -134,7 +140,24 @@ auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::UpperBound(const KeyType &key, const KeyCom
 }
 
 INDEX_TEMPLATE_ARGUMENTS
-auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::InsertAndIncrease(int index, const KeyType &key, const ValueType &value) -> void {
+auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::Search(const KeyType &key, const KeyComparator &cmp) -> int {
+  return UpperBound(key, cmp) - 1;
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::FindValue(const ValueType &value) -> int {
+  int i;
+  for (i = 0; i < GetMaxSize(); ++i) {
+    if (array_[i].second == value) {
+      return i;
+    }
+  }
+  assert(i != GetMaxSize());
+  return i;
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::InsertAt(int index, const KeyType &key, const ValueType &value) -> void {
   assert(index <= GetSize());
   array_[GetSize()] = MappingType{key, value};
   for (int j = GetSize(); j > index; --j) {
