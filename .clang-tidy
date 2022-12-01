@@ -26,6 +26,7 @@ Checks:     '
             performance-*,
             portability-*,
             readability-*,
+            readability-inconsistent-declaration-parameter-name,
             -bugprone-easily-swappable-parameters,
             -bugprone-implicit-widening-of-multiplication-result,
             -bugprone-narrowing-conversions,

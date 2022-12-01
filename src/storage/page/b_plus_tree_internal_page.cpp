@@ -147,12 +147,11 @@ auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::Search(const KeyType &key, const KeyCompara
 INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::FindValue(const ValueType &value) -> int {
   int i;
-  for (i = 0; i < GetMaxSize(); ++i) {
+  for (i = 0; i < GetSize(); ++i) {
     if (array_[i].second == value) {
       return i;
     }
   }
-  assert(i != GetMaxSize());
   return i;
 }
 

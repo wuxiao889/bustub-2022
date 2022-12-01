@@ -43,7 +43,7 @@ TEST(BPlusTreeTests, InsertTest1) {
   (void)header_page;
 
   // TODO(wxx)  修改这里测试
-  int size = 10000;
+  int size = 100;
 
   std::vector<int64_t> keys(size);
 
@@ -59,13 +59,12 @@ TEST(BPlusTreeTests, InsertTest1) {
     rid.Set(static_cast<int32_t>(key >> 32), value);
     index_key.SetFromInteger(key);
     tree.Insert(index_key, rid, transaction);
-    // tree.Draw(bpm, "/home/wxx/bustub-private/build-vscode/bin/InsertTest_" + std::to_string(i) + ".dot");
   }
+  tree.Draw(bpm, "/home/wxx/bustub-private/build-vscode/bin/InsertTest_" + std::to_string(size) + ".dot");
 
   std::vector<RID> rids;
 
   // std::shuffle(keys.begin(), keys.end(), g);
-  // tree.Draw(bpm, "/home/wxx/bustub-private/build-vscode/bin/InsertTest_.dot");
 
   for (auto key : keys) {
     rids.clear();

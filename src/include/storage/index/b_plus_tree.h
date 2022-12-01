@@ -96,7 +96,7 @@ class BPlusTree {
 
   auto RemovePessimistic(const KeyType &key, Transaction *transaction);
   auto RemoveEntry(Page *page, const KeyType &key, int position, bool &root_locked, Transaction *transaction) -> bool;
-  void BorrowFromLeft(BPlusTreePage *node, BPlusTreePage *leftnode, int left_position, Transaction *transaction);
+  void BorrowFromLeft(BPlusTreePage *node, BPlusTreePage *left_node, int left_position, Transaction *transaction);
   void BorrowFromRight(BPlusTreePage *node, BPlusTreePage *right_node, int left_position, Transaction *transaction);
   // always merge right to left
   void Merge(BPlusTreePage *left_node, BPlusTreePage *right_node, int posOfLeftPage, bool &root_locked,
@@ -106,7 +106,7 @@ class BPlusTree {
 
   void UpdateChild(InternalPage *node, int first, int last);
 
-  void FreePageSet(Transaction *transaction, bool free_root = false);
+  void UnPinPageSet(Transaction *transaction, bool free_root = false);
 
   auto CastBPlusPage(Page *page) const -> BPlusTreePage * { return reinterpret_cast<BPlusTreePage *>(page->GetData()); }
   auto CastLeafPage(Page *page) const -> LeafPage * { return reinterpret_cast<LeafPage *>(page->GetData()); }
