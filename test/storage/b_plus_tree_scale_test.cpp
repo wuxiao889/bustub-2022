@@ -43,7 +43,7 @@ TEST(BPlusTreeTests, InsertTest1) {
   (void)header_page;
 
   // TODO(wxx)  修改这里测试
-  int size = 1000;
+  int size = 10000;
 
   std::vector<int64_t> keys(size);
 
@@ -80,7 +80,7 @@ TEST(BPlusTreeTests, InsertTest1) {
   // std::shuffle(keys.begin(), keys.end(), g);
 
   for (auto key : keys) {
-    i++;
+    // i++;
     index_key.SetFromInteger(key);
     tree.Remove(index_key, transaction);
     // tree.Draw(bpm, "/home/wxx/bustub-private/build-vscode/bin/InsertTest_" + std::to_string(i) + "delete_" +

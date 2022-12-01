@@ -51,26 +51,26 @@ class Page {
 
   /** Acquire the page write latch. */
   inline void WLatch() {
-    rwlatch_.WLock();
     // LOG_INFO("page %d WLatch", page_id_);
+    rwlatch_.WLock();
   }
 
   /** Release the page write latch. */
   inline void WUnlatch() {
-    rwlatch_.WUnlock();
     // LOG_INFO("page %d WUnlatch", page_id_);
+    rwlatch_.WUnlock();
   }
 
   /** Acquire the page read latch. */
   inline void RLatch() {
-    rwlatch_.RLock();
     // LOG_INFO("page %d RLatch", page_id_);
+    rwlatch_.RLock();
   }
 
   /** Release the page read latch. */
   inline void RUnlatch() {
-    rwlatch_.RUnlock();
     // LOG_INFO("page %d RUnlatch", page_id_);
+    rwlatch_.RUnlock();
   }
 
   /** @return the page LSN. */

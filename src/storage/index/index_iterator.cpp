@@ -33,6 +33,9 @@ INDEXITERATOR_TYPE::~IndexIterator() {
 
 INDEX_TEMPLATE_ARGUMENTS
 auto INDEXITERATOR_TYPE::IsEnd() -> bool {
+  if (page_ == nullptr) {
+    return true;
+  }
   auto page = reinterpret_cast<LeafPage *>(page_->GetData());
   return page->GetNextPageId() == INVALID_PAGE_ID && position_ == page->GetSize();
 }
@@ -45,6 +48,7 @@ auto INDEXITERATOR_TYPE::operator*() -> const MappingType & {
 
 INDEX_TEMPLATE_ARGUMENTS
 auto INDEXITERATOR_TYPE::operator++() -> INDEXITERATOR_TYPE & {
+  assert(page_ != nullptr);
   auto node = reinterpret_cast<LeafPage *>(page_->GetData());
   if (++position_ != node->GetSize() || IsEnd()) {
     return *this;
