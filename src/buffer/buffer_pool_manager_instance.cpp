@@ -13,6 +13,8 @@
 #include "buffer/buffer_pool_manager_instance.h"
 #include <cassert>
 #include <cstddef>
+#include <cstdlib>
+#include <exception>
 #include <mutex>  // NOLINT
 
 #include "common/config.h"
@@ -196,7 +198,7 @@ auto BufferPoolManagerInstance::DeletePgImp(page_id_t page_id) -> bool {
   // If the page is pinned and cannot be deleted, return false immediately.
   if (page->pin_count_ > 0) {
     LOG_WARN("\033[1;31m page %d pin_count %d \033[0m!", page_id, page->pin_count_);
-    assert(false);
+    // abort();
     return false;
   }
   // After deleting the page from the page table, stop tracking the frame

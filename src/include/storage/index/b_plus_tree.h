@@ -88,7 +88,7 @@ class BPlusTree {
   auto IsSafe(BPlusTreePage *node, Operation operation) -> bool;
 
   auto FindLeafPage(const KeyType &key, Operation operation, bool optimistic, bool &root_locked,
-                    Transaction *transaction) -> std::pair<Page *, bool>;
+                    Transaction *transaction) -> Page *;
 
   auto InsertPessimistic(const KeyType &key, const ValueType &value, Transaction *transaction) -> bool;
   void InsertInParent(BPlusTreePage *left_node, BPlusTreePage *right_node, const KeyType &key, page_id_t value,
@@ -106,7 +106,7 @@ class BPlusTree {
 
   void UpdateChild(InternalPage *node, int first, int last);
 
-  void ClearPageSet(Transaction *transaction, bool free_root = false);
+  void ClearPageSet(Transaction *transaction);
 
   auto CastBPlusPage(Page *page) const -> BPlusTreePage * { return reinterpret_cast<BPlusTreePage *>(page->GetData()); }
   auto CastLeafPage(Page *page) const -> LeafPage * { return reinterpret_cast<LeafPage *>(page->GetData()); }
@@ -139,6 +139,7 @@ class BPlusTree {
   page_id_t right_most_;
 
   std::mutex latch_;  // guard root_page / root_page_id
+  std::mutex mutex_;
 };
 
 }  // namespace bustub

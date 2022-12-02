@@ -17,6 +17,7 @@
 #include <string>
 
 #include "buffer/buffer_pool_manager_instance.h"
+#include "concurrency/transaction.h"
 #include "gtest/gtest.h"
 #include "storage/index/b_plus_tree.h"
 #include "test_util.h"  // NOLINT
@@ -31,7 +32,7 @@ TEST(BPlusTreeTests, InsertTest1) {
   auto *disk_manager = new DiskManager("test.db");
   BufferPoolManager *bpm = new BufferPoolManagerInstance(50, disk_manager);
   // create b+ tree
-  BPlusTree<GenericKey<8>, RID, GenericComparator<8>> tree("foo_pk", bpm, comparator);
+  BPlusTree<GenericKey<8>, RID, GenericComparator<8>> tree("foo_pk", bpm, comparator, 3, 3);
   GenericKey<8> index_key;
   RID rid;
   // create transaction
@@ -43,7 +44,7 @@ TEST(BPlusTreeTests, InsertTest1) {
   (void)header_page;
 
   // TODO(wxx)  修改这里测试
-  int size = 100;
+  int size = 10;
 
   std::vector<int64_t> keys(size);
 
@@ -52,15 +53,16 @@ TEST(BPlusTreeTests, InsertTest1) {
   std::random_device rd;
   std::mt19937 g(rd());
   // std::shuffle(keys.begin(), keys.end(), g);
-  // int i = 0;
+  int i = 0;
   for (auto key : keys) {
-    // i++;
+    i++;
     int64_t value = key & 0xFFFFFFFF;
     rid.Set(static_cast<int32_t>(key >> 32), value);
     index_key.SetFromInteger(key);
+    tree.Draw(bpm, "/home/wxx/bustub-private/build-vscode/bin/InsertTest_insert" + std::to_string(i) + ".dot");
     tree.Insert(index_key, rid, transaction);
   }
-  tree.Draw(bpm, "/home/wxx/bustub-private/build-vscode/bin/InsertTest_" + std::to_string(size) + ".dot");
+  tree.Draw(bpm, "/home/wxx/bustub-private/build-vscode/bin/InsertTest_insert" + std::to_string(i) + ".dot");
 
   std::vector<RID> rids;
 
@@ -75,18 +77,22 @@ TEST(BPlusTreeTests, InsertTest1) {
     int64_t value = key & 0xFFFFFFFF;
     EXPECT_EQ(rids[0].GetSlotNum(), value);
   }
-
+  i = 0;
   // std::shuffle(keys.begin(), keys.end(), g);
-
   for (auto key : keys) {
-    // i++;
+    if (key % 2 == 0) {
+      continue;
+    }
+    tree.Draw(bpm, "/home/wxx/bustub-private/build-vscode/bin/InsertTest1_delele" + std::to_string(i) + ".dot");
+    i++;
     index_key.SetFromInteger(key);
     tree.Remove(index_key, transaction);
     // tree.Draw(bpm, "/home/wxx/bustub-private/build-vscode/bin/InsertTest_" + std::to_string(i) + "delete_" +
-    //                    std::to_string(index_key.ToString()) + ".dot");
+    //  std::to_string(index_key.ToString()) + ".dot");
   }
+  tree.Draw(bpm, "/home/wxx/bustub-private/build-vscode/bin/InsertTest1_delele" + std::to_string(i) + ".dot");
 
-  EXPECT_EQ(true, tree.IsEmpty());
+  // EXPECT_EQ(true, tree.IsEmpty());
 
   bpm->UnpinPage(HEADER_PAGE_ID, true);
 

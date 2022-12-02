@@ -121,6 +121,7 @@ INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::DumpAll() -> std::vector<MappingType> {
   std::vector<MappingType> res(array_, array_ + GetMaxSize());
   res.reserve(GetMaxSize() + 1);
+  SetSize(0);
   return res;
 }
 

@@ -27,8 +27,10 @@ INDEXITERATOR_TYPE::IndexIterator(const IndexIterator &x)
 
 INDEX_TEMPLATE_ARGUMENTS
 INDEXITERATOR_TYPE::~IndexIterator() {
-  page_->RUnlatch();
-  buffer_pool_manager_->UnpinPage(page_->GetPageId(), false);
+  if (page_ != nullptr) {
+    page_->RUnlatch();
+    buffer_pool_manager_->UnpinPage(page_->GetPageId(), false);
+  }
 }
 
 INDEX_TEMPLATE_ARGUMENTS
