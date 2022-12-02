@@ -115,7 +115,7 @@ auto BPLUSTREE_TYPE::FindLeafPage(const KeyType &key, Operation operation, bool 
       Page *next_page = FetchChildPage(internal_node, index - 1);
       next_page->RLatch();
       assert(CastBPlusPage(next_page)->GetParentPageId() == internal_node->GetPageId());
-      
+
       page->RUnlatch();
       buffer_pool_manager_->UnpinPage(page->GetPageId(), false);
 
@@ -616,7 +616,7 @@ auto BPLUSTREE_TYPE::RemoveEntry(Page *page, const KeyType &key, int position, b
           root_locked = false;
         }
       }
-      BorrowFromLeft(node, left_node, node_position, transaction);
+      BorrowFromLeft(node, left_node, node_position - 1, transaction);
     } else {
       Merge(left_node, node, node_position - 1, root_locked, transaction);
       transaction->AddIntoDeletedPageSet(node->GetPageId());
@@ -653,9 +653,9 @@ void BPLUSTREE_TYPE::BorrowFromLeft(BPlusTreePage *node, BPlusTreePage *left_nod
     right_internal_node->SetKeyAt(1, parent_node->KeyAt(left_position + 1));  // bring down the key  from parent
     // bring the last child from left
     right_internal_node->SetValueAt(0, left_internal_node->ValueAt(left_internal_node->GetSize() - 1));
-    left_internal_node->IncreaseSize(-1);
     // send up last key of the left to the parent
     parent_node->SetKeyAt(left_position + 1, left_internal_node->KeyAt(left_internal_node->GetSize() - 1));
+    left_internal_node->IncreaseSize(-1);
 
     Page *child_page = FetchChildPage(right_internal_node, 0);
     BPlusTreePage *child_node = CastBPlusPage(child_page);
