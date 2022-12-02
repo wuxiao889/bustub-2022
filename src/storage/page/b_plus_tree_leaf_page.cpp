@@ -108,7 +108,7 @@ INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_LEAF_PAGE_TYPE::GetValue(const KeyType &key, ValueType &value, const KeyComparator &comparator)
     -> bool {
   int index = LowerBound(key, comparator);
-  if (index < GetMaxSize() && comparator(key, KeyAt(index)) == 0) {
+  if (index < GetSize() && comparator(key, KeyAt(index)) == 0) {
     value = ValueAt(index);
     return true;
   }
