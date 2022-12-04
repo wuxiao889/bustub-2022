@@ -23,6 +23,7 @@
 namespace bustub {
 /**
  * ExecutorContext stores all the context necessary to run an executor.
+ * include tracsaction, catalog, buffer_pool_manager, transaction_manager, log_manager
  */
 class ExecutorContext {
  public:

@@ -88,7 +88,7 @@ auto Tuple::operator=(const Tuple &other) -> Tuple & {
     data_ = new char[size_];
     memcpy(data_, other.data_, size_);
   } else {
-    // Shallow copy.
+    // Shallow copy.  这是什么情况？
     data_ = other.data_;
   }
 

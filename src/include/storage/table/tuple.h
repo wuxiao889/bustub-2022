@@ -27,6 +27,11 @@ namespace bustub {
  * | FIXED-SIZE or VARIED-SIZED OFFSET | PAYLOAD OF VARIED-SIZED FIELD |
  * ---------------------------------------------------------------------
  */
+
+/**
+ * @brief allocated / rid / size / date*;
+ *        24bytes
+ */
 class Tuple {
   friend class TablePage;
   friend class TableHeap;
