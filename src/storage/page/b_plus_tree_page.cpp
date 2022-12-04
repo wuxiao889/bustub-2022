@@ -52,7 +52,10 @@ auto BPlusTreePage::GetMinSize() const -> int {
  * Helper methods to get/set parent page id
  */
 auto BPlusTreePage::GetParentPageId() const -> page_id_t { return parent_page_id_; }
-void BPlusTreePage::SetParentPageId(page_id_t parent_page_id) { parent_page_id_ = parent_page_id; }
+void BPlusTreePage::SetParentPageId(page_id_t parent_page_id) {
+  // LOG_INFO("child %d fa %d\n", GetPageId(), parent_page_id);
+  parent_page_id_ = parent_page_id;
+}
 
 /*
  * Helper methods to get/set self page id

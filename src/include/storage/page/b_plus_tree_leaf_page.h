@@ -61,6 +61,8 @@ class BPlusTreeLeafPage : public BPlusTreePage {
   auto Remove(const KeyType &key, const KeyComparator &comparator) -> bool;
   auto LowerBound(const KeyType &key, const KeyComparator &comparator) const -> int;
 
+  void Split(BPlusTreeLeafPage *new_left_node);
+
   auto GetValue(const KeyType &key, ValueType &value, const KeyComparator &comparator) -> bool;
 
   auto operator[](int index) -> MappingType & { return array_[index]; }

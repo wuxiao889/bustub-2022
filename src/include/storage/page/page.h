@@ -12,6 +12,7 @@
 
 #pragma once
 
+#include <unistd.h>
 #include <cstring>
 #include <iostream>
 
@@ -51,25 +52,25 @@ class Page {
 
   /** Acquire the page write latch. */
   inline void WLatch() {
-    // LOG_INFO("page %d WLatch", page_id_);
     rwlatch_.WLock();
+    // LOG_INFO("%d page %d WLatch %d\n", ::gettid(), page_id_, pin_count_);
   }
 
   /** Release the page write latch. */
   inline void WUnlatch() {
-    // LOG_INFO("page %d WUnlatch", page_id_);
+    // LOG_INFO("%d page %d WUnlatch() %d\n", ::gettid(), page_id_, pin_count_ - 1);
     rwlatch_.WUnlock();
   }
 
   /** Acquire the page read latch. */
   inline void RLatch() {
-    // LOG_INFO("page %d RLatch", page_id_);
     rwlatch_.RLock();
+    // LOG_INFO("%d page %d RLatch() %d\n", ::gettid(), page_id_, pin_count_);
   }
 
   /** Release the page read latch. */
   inline void RUnlatch() {
-    // LOG_INFO("page %d RUnlatch", page_id_);
+    // LOG_INFO("%d page %d RUnlatch()%d\n", ::gettid(), page_id_, pin_count_ - 1);
     rwlatch_.RUnlock();
   }
 

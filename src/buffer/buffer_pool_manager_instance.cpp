@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "buffer/buffer_pool_manager_instance.h"
+#include <unistd.h>
 #include <cassert>
 #include <cstddef>
 #include <cstdlib>
@@ -79,10 +80,12 @@ auto BufferPoolManagerInstance::NewPgImp(page_id_t *page_id) -> Page * {
     page->pin_count_++;
     // LOG_DEBUG("page %d pin_count +1 = %d", *page_id, page->pin_count_);
   }
+  // LOG_INFO("%d new page %d", ::getpid(), *page_id);
   return page;
 }
 
 auto BufferPoolManagerInstance::FetchPgImp(page_id_t page_id) -> Page * {
+  assert(page_id != INVALID_PAGE_ID);
   std::lock_guard lock(latch_);
   Page *page = nullptr;
   frame_id_t frame_id = -1;
@@ -93,9 +96,11 @@ auto BufferPoolManagerInstance::FetchPgImp(page_id_t page_id) -> Page * {
     replacer_->RecordAccess(frame_id);
     replacer_->SetEvictable(frame_id, false);
     page->pin_count_++;
+    // LOG_INFO("%d fetch page %d pin_count %d", ::getpid(), page_id, page->pin_count_);
     // LOG_DEBUG("page %d pin_count +1 = %d", page_id, page->pin_count_);
     return page;
   }
+
   // If not found, pick a replacement frame from either the free list or the replacer (always find from the free list
   // first
   if (!free_list_.empty()) {
@@ -131,17 +136,18 @@ auto BufferPoolManagerInstance::FetchPgImp(page_id_t page_id) -> Page * {
 }
 
 auto BufferPoolManagerInstance::UnpinPgImp(page_id_t page_id, bool is_dirty) -> bool {
+  std::lock_guard lock(latch_);
   frame_id_t frame_id = -1;
   // If page_id is not in the buffer pool
   if (!page_table_->Find(page_id, frame_id)) {
-    assert(false && "cant found");
+    // LOG_WARN("\033[1;31m %d page %d unpin false! \033[0m", ::getpid(), page_id);
     return false;
   }
   Page *page = pages_ + frame_id;
-  std::lock_guard lock(latch_);
   // its pin count is already 0, return false.
   if (page->pin_count_ <= 0) {
-    // LOG_DEBUG("page %d pin_count already <= 0!", page_id);
+    // LOG_WARN("\033[1;31m %d page %d pin_count already <= 0! \033[0m", ::getpid(), page_id);
+    // assert(false);
     return false;
   }
   // is_dirty true if the page should be marked as dirty, false otherwise
@@ -149,24 +155,24 @@ auto BufferPoolManagerInstance::UnpinPgImp(page_id_t page_id, bool is_dirty) -> 
     page->is_dirty_ = true;
   }
   --page->pin_count_;
-  // LOG_DEBUG("page %d pin_count -1 = %d", page_id, page->pin_count_);
   // Decrement the pin count of a page. If the pin count reaches 0, the frame should be evictable by the replacer.
   if (page->pin_count_ == 0) {
     // LOG_DEBUG("page %d pin_count %d evitable!", page_id, page->pin_count_);
     replacer_->SetEvictable(frame_id, true);
   }
+  // LOG_INFO("%d unpin page %d pin_count %d", ::getpid(), page_id, page->pin_count_);
   return true;
 }
 
 auto BufferPoolManagerInstance::FlushPgImp(page_id_t page_id) -> bool {
+  std::lock_guard lock(latch_);
   frame_id_t frame_id = -1;
   // false if the page could not be found in the page table
   if (!page_table_->Find(page_id, frame_id)) {
-    assert(false && "cant found");
+    // assert(false && "cant found");
     return false;
   }
   Page *page = pages_ + frame_id;
-  std::lock_guard lock(latch_);
   // Use the DiskManager::WritePage() method to flush a page to disk.
   disk_manager_->WritePage(page_id, page->data_);
   // Unset the dirty flag of the page after flushing.
@@ -188,16 +194,16 @@ void BufferPoolManagerInstance::FlushAllPgsImp() {
 }
 
 auto BufferPoolManagerInstance::DeletePgImp(page_id_t page_id) -> bool {
+  std::lock_guard lock(latch_);
   frame_id_t frame_id = -1;
   // If page_id is not in the buffer pool, do nothing and return true.
   if (!page_table_->Find(page_id, frame_id)) {
     return true;
   }
   Page *page = pages_ + frame_id;
-  std::lock_guard lock(latch_);
   // If the page is pinned and cannot be deleted, return false immediately.
   if (page->pin_count_ > 0) {
-    LOG_WARN("\033[1;31m page %d pin_count %d \033[0m!", page_id, page->pin_count_);
+    // LOG_WARN("\033[1;31m %d page %d pin_count %d !\033[0m", ::getpid(), page_id, page->pin_count_);
     // abort();
     return false;
   }
@@ -206,11 +212,11 @@ auto BufferPoolManagerInstance::DeletePgImp(page_id_t page_id) -> bool {
   page_table_->Remove(page_id);
   replacer_->Remove(frame_id);
   free_list_.push_back(frame_id);
-
   // reset the page's memory and metadata. Finally, you should call DeallocatePage() to imitate freeing the page on the
   // disk.
   ResetPage(page);
   DeallocatePage(page_id);
+  // LOG_INFO("\033[1;31m %d page %d delete!\033[0m", ::getpid(), page_id);
   return true;
 }
 

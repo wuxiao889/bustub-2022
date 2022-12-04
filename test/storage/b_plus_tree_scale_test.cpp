@@ -32,19 +32,17 @@ TEST(BPlusTreeTests, InsertTest1) {
   auto *disk_manager = new DiskManager("test.db");
   BufferPoolManager *bpm = new BufferPoolManagerInstance(50, disk_manager);
   // create b+ tree
-  BPlusTree<GenericKey<8>, RID, GenericComparator<8>> tree("foo_pk", bpm, comparator, 3, 3);
+  BPlusTree<GenericKey<8>, RID, GenericComparator<8>> tree("foo_pk", bpm, comparator, 6, 6);
   GenericKey<8> index_key;
   RID rid;
   // create transaction
   auto *transaction = new Transaction(0);
-
   // create and fetch header_page
   page_id_t page_id;
   auto header_page = bpm->NewPage(&page_id);
   (void)header_page;
 
-  // TODO(wxx)  修改这里测试
-  int size = 10;
+  int size = 10000;
 
   std::vector<int64_t> keys(size);
 
@@ -52,21 +50,23 @@ TEST(BPlusTreeTests, InsertTest1) {
 
   std::random_device rd;
   std::mt19937 g(rd());
-  // std::shuffle(keys.begin(), keys.end(), g);
+  std::shuffle(keys.begin(), keys.end(), g);
+  std::cout << "---------" << std::endl;
   int i = 0;
+  (void)i;
   for (auto key : keys) {
     i++;
     int64_t value = key & 0xFFFFFFFF;
     rid.Set(static_cast<int32_t>(key >> 32), value);
     index_key.SetFromInteger(key);
-    tree.Draw(bpm, "/home/wxx/bustub-private/build-vscode/bin/InsertTest_insert" + std::to_string(i) + ".dot");
     tree.Insert(index_key, rid, transaction);
+    // tree.Draw(bpm, "/home/wxx/bustub-private/build-vscode/bin/InsertTest_step" + std::to_string(i) + "_insert" +
+    //                    std::to_string(key) + ".dot");
   }
-  tree.Draw(bpm, "/home/wxx/bustub-private/build-vscode/bin/InsertTest_insert" + std::to_string(i) + ".dot");
-
+  // tree.Draw(bpm, "/home/wxx/bustub-private/build-vscode/bin/InsertTest_step0.dot");
   std::vector<RID> rids;
 
-  // std::shuffle(keys.begin(), keys.end(), g);
+  std::shuffle(keys.begin(), keys.end(), g);
 
   for (auto key : keys) {
     rids.clear();
@@ -77,22 +77,31 @@ TEST(BPlusTreeTests, InsertTest1) {
     int64_t value = key & 0xFFFFFFFF;
     EXPECT_EQ(rids[0].GetSlotNum(), value);
   }
-  i = 0;
-  // std::shuffle(keys.begin(), keys.end(), g);
+
+  int64_t start_key = 1;
+  int64_t current_key = start_key;
+  index_key.SetFromInteger(start_key);
+
+  for (auto iterator = tree.Begin(index_key); iterator != tree.End(); ++iterator) {
+    auto location = (*iterator).second;
+    EXPECT_EQ(location.GetPageId(), 0);
+    EXPECT_EQ(location.GetSlotNum(), current_key);
+    current_key = current_key + 1;
+  }
+
+  EXPECT_EQ(current_key, keys.size() + 1);
+  // i = 0;
+  // keys = {17, 9, 19, 3, 11, 1, 15, 7, 5, 13};
+  std::shuffle(keys.begin(), keys.end(), g);
   for (auto key : keys) {
-    if (key % 2 == 0) {
-      continue;
-    }
-    tree.Draw(bpm, "/home/wxx/bustub-private/build-vscode/bin/InsertTest1_delele" + std::to_string(i) + ".dot");
     i++;
     index_key.SetFromInteger(key);
     tree.Remove(index_key, transaction);
-    // tree.Draw(bpm, "/home/wxx/bustub-private/build-vscode/bin/InsertTest_" + std::to_string(i) + "delete_" +
-    //  std::to_string(index_key.ToString()) + ".dot");
+    // tree.Draw(bpm, "/home/wxx/bustub-private/build-vscode/bin/InsertTest1_step" + std::to_string(i) + " delele" +
+    //                    std::to_string(key) + ".dot");
   }
-  tree.Draw(bpm, "/home/wxx/bustub-private/build-vscode/bin/InsertTest1_delele" + std::to_string(i) + ".dot");
 
-  // EXPECT_EQ(true, tree.IsEmpty());
+  EXPECT_EQ(true, tree.IsEmpty());
 
   bpm->UnpinPage(HEADER_PAGE_ID, true);
 
@@ -122,7 +131,6 @@ TEST(BPlusTreeTests, DISABLED_InsertTest2) {
   auto header_page = bpm->NewPage(&page_id);
   (void)header_page;
 
-  // TODO(wxx)  修改这里测试
   int size = 10000;
 
   std::vector<int64_t> keys(size);
@@ -172,7 +180,7 @@ TEST(BPlusTreeTests, DISABLED_InsertTest2) {
   remove("test.log");
 }
 
-TEST(BPlusTreeTests, DISABLED_InsertTest3) {
+TEST(BPlusTreeTests, InsertTest3) {
   // create KeyComparator and index schema
   auto key_schema = ParseCreateStatement("a bigint");
   GenericComparator<8> comparator(key_schema.get());
@@ -191,8 +199,7 @@ TEST(BPlusTreeTests, DISABLED_InsertTest3) {
   auto header_page = bpm->NewPage(&page_id);
   (void)header_page;
 
-  // TODO(wxx)  修改这里测试
-  int size = 3000;
+  int size = 1000;
 
   std::vector<int64_t> keys(size);
 
@@ -210,21 +217,21 @@ TEST(BPlusTreeTests, DISABLED_InsertTest3) {
   }
   // std::cout << tree.GetLevel() << std::endl;
 
-  std::vector<RID> rids;
+  // std::vector<RID> rids;
 
-  std::shuffle(keys.begin(), keys.end(), g);
+  // std::shuffle(keys.begin(), keys.end(), g);
 
-  for (auto key : keys) {
-    rids.clear();
-    index_key.SetFromInteger(key);
-    tree.GetValue(index_key, &rids);
-    EXPECT_EQ(rids.size(), 1);
+  // for (auto key : keys) {
+  //   rids.clear();
+  //   index_key.SetFromInteger(key);
+  //   tree.GetValue(index_key, &rids);
+  //   EXPECT_EQ(rids.size(), 1);
 
-    int64_t value = key & 0xFFFFFFFF;
-    EXPECT_EQ(rids[0].GetSlotNum(), value);
-  }
+  //   int64_t value = key & 0xFFFFFFFF;
+  //   EXPECT_EQ(rids[0].GetSlotNum(), value);
+  // }
 
-  std::shuffle(keys.begin(), keys.end(), g);
+  // std::shuffle(keys.begin(), keys.end(), g);
 
   // for (auto key : keys) {
   //   index_key.SetFromInteger(key);

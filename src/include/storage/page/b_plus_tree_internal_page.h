@@ -50,12 +50,13 @@ class BPlusTreeInternalPage : public BPlusTreePage {
 
   // @brief find the first element >= key
   auto LowerBound(const KeyType &key, const KeyComparator &cmp) -> int;
-  // @brief find the first element > key
-  auto UpperBound(const KeyType &key, const KeyComparator &cmp) -> int;
 
   auto Search(const KeyType &key, const KeyComparator &cmp) -> int;
 
-  auto FindValue(const ValueType &value) -> int;
+  auto FindIndex(const ValueType &value) -> int;
+
+  void Split(BPlusTreeInternalPage *new_node, const KeyType &key, const ValueType &value,
+             const KeyComparator &comparator);
 
   void ShiftLeft(int i = 0);
   void ShiftRight();
@@ -63,9 +64,9 @@ class BPlusTreeInternalPage : public BPlusTreePage {
   void Copy(const BPlusTreeInternalPage *src, int result, int first, int last);
   void Copy(const std::vector<MappingType> &src, int result, int first, int last);
 
-  auto DumpAll() -> std::vector<MappingType>;
-
  private:
+  // @brief find the first element > key
+  auto UpperBound(const KeyType &key, const KeyComparator &cmp) -> int;
   // std::pair<KeyType, ValueType>
   // Flexible array member for page data.
   MappingType array_[1];

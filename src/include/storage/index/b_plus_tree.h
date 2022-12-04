@@ -92,15 +92,17 @@ class BPlusTree {
 
   auto InsertPessimistic(const KeyType &key, const ValueType &value, Transaction *transaction) -> bool;
   void InsertInParent(BPlusTreePage *left_node, BPlusTreePage *right_node, const KeyType &key, page_id_t value,
-                      bool &root_locked, Transaction *transaction = nullptr);
+                      Transaction *transaction = nullptr);
 
   auto RemovePessimistic(const KeyType &key, Transaction *transaction);
-  auto RemoveEntry(Page *page, const KeyType &key, int position, bool &root_locked, Transaction *transaction) -> bool;
+  auto RemoveInInternal(Page *page, bool &root_locked, Transaction *transaction) -> bool;
   void BorrowFromLeft(BPlusTreePage *node, BPlusTreePage *left_node, int left_position, Transaction *transaction);
   void BorrowFromRight(BPlusTreePage *node, BPlusTreePage *right_node, int left_position, Transaction *transaction);
   // always merge right to left
-  void Merge(BPlusTreePage *left_node, BPlusTreePage *right_node, int posOfLeftPage, bool &root_locked,
-             Transaction *transaction);
+  auto Merge(BPlusTreePage *left_node, BPlusTreePage *right_node, int posOfLeftPage, bool &root_locked,
+             Transaction *transaction) -> bool;
+
+  void UnlockRoot(bool &root_locked);
 
   auto FetchChildPage(InternalPage *node, int index) const -> Page *;
 
@@ -139,7 +141,6 @@ class BPlusTree {
   page_id_t right_most_;
 
   std::mutex latch_;  // guard root_page / root_page_id
-  std::mutex mutex_;
 };
 
 }  // namespace bustub

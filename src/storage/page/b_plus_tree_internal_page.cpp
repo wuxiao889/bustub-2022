@@ -50,10 +50,7 @@ auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::KeyAt(int index) const -> KeyType {
 }
 
 INDEX_TEMPLATE_ARGUMENTS
-void B_PLUS_TREE_INTERNAL_PAGE_TYPE::SetKeyAt(int index, const KeyType &key) {
-  // assert(index > 0);
-  array_[index].first = key;
-}
+void B_PLUS_TREE_INTERNAL_PAGE_TYPE::SetKeyAt(int index, const KeyType &key) { array_[index].first = key; }
 
 /*
  * Helper method to get the value associated with input "index"(a.k.a array
@@ -62,11 +59,16 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::SetKeyAt(int index, const KeyType &key) {
 INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::ValueAt(int index) const -> ValueType {
   assert(index < GetSize());
+  assert(array_[index].second != INVALID_PAGE_ID);
   return array_[index].second;
 }
 
 INDEX_TEMPLATE_ARGUMENTS
-void B_PLUS_TREE_INTERNAL_PAGE_TYPE::SetValueAt(int index, const ValueType &value) { array_[index].second = value; }
+void B_PLUS_TREE_INTERNAL_PAGE_TYPE::SetValueAt(int index, const ValueType &value) {
+  assert(value != INVALID_PAGE_ID);
+  assert(value >= 0);
+  array_[index].second = value;
+}
 
 /**
  * @brief find the first element >= key
@@ -118,14 +120,6 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::Copy(const std::vector<MappingType> &src, i
 }
 
 INDEX_TEMPLATE_ARGUMENTS
-auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::DumpAll() -> std::vector<MappingType> {
-  std::vector<MappingType> res(array_, array_ + GetMaxSize());
-  res.reserve(GetMaxSize() + 1);
-  SetSize(0);
-  return res;
-}
-
-INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::UpperBound(const KeyType &key, const KeyComparator &cmp) -> int {
   int left = 1;
   int right = GetSize();
@@ -146,7 +140,7 @@ auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::Search(const KeyType &key, const KeyCompara
 }
 
 INDEX_TEMPLATE_ARGUMENTS
-auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::FindValue(const ValueType &value) -> int {
+auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::FindIndex(const ValueType &value) -> int {
   int i;
   for (i = 0; i < GetSize(); ++i) {
     if (array_[i].second == value) {
@@ -164,6 +158,26 @@ auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::InsertAt(int index, const KeyType &key, con
     std::swap(array_[j], array_[j - 1]);
   }
   IncreaseSize(1);
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+void B_PLUS_TREE_INTERNAL_PAGE_TYPE::Split(BPlusTreeInternalPage *new_node, const KeyType &key,const ValueType& value,
+                                           const KeyComparator &comparator) {
+  // 找一个更大的空间存储，二分 然后插入
+  std::vector<MappingType> vec(array_, array_ + GetMaxSize());
+  vec.reserve(GetMaxSize() + 1);
+  SetSize(0);
+  int index = std::lower_bound(vec.begin() + 1, vec.end(), key,
+                               [&](const std::pair<KeyType, page_id_t> &l, const KeyType &r) {
+                                 return comparator(l.first, r) < 0;
+                               }) -
+              vec.begin();
+  vec.insert(vec.begin() + index, {key, value});
+
+  int x = GetMinSize();
+  Copy(vec, 0, 0, x);
+  new_node->Copy(vec, 0, x, vec.size());
+  assert(new_node->GetSize() == GetMaxSize() - x + 1);
 }
 
 // valuetype for internalNode should be page id_t

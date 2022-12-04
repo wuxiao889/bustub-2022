@@ -124,11 +124,9 @@ auto LRUKReplacer::InsertToSet(frame_id_t frame_id) -> void {
 auto LRUKReplacer::EvitFromSet(std::set<Node> &set_, frame_id_t *frame_id) -> bool {
   for (auto it = set_.begin(); it != set_.end(); ++it) {
     auto id = it->id_;
-    if (evitable_[id]) {
-      set_.erase(it);
-      *frame_id = id;
-      return true;
-    }
+    set_.erase(it);
+    *frame_id = id;
+    return true;
   }
   return false;
 }

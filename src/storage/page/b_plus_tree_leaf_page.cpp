@@ -9,6 +9,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include <unistd.h>
 #include <algorithm>
 #include <optional>
 #include <sstream>
@@ -123,6 +124,13 @@ void B_PLUS_TREE_LEAF_PAGE_TYPE::InsertAt(int index, const KeyType &key, const V
     std::swap(array_[j], array_[j - 1]);
   }
   IncreaseSize(1);
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+void B_PLUS_TREE_LEAF_PAGE_TYPE::Split(BPlusTreeLeafPage *new_node) {
+  int x = GetMaxSize() / 2;
+  new_node->Copy(this, 0, x, GetMaxSize());
+  SetSize(x);
 }
 
 INDEX_TEMPLATE_ARGUMENTS
