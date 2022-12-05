@@ -60,7 +60,6 @@ class ProjectionExecutor : public AbstractExecutor {
 };
 }  // namespace bustub
 
-
 /*
 bustub> EXPLAIN SELECT 1 + 2;
  === BINDER ===

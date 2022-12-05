@@ -14,6 +14,7 @@
 
 #include <vector>
 
+#include "catalog/catalog.h"
 #include "common/rid.h"
 #include "execution/executor_context.h"
 #include "execution/executors/abstract_executor.h"
@@ -39,10 +40,22 @@ class IndexScanExecutor : public AbstractExecutor {
 
   void Init() override;
 
+  /*
+  The IndexScanExecutor iterates over an index to retrieve RIDs for tuples. The operator then uses these RIDs to
+  retrieve their tuples in the corresponding table. It then emits these tuples one-at-a-time.
+  */
   auto Next(Tuple *tuple, RID *rid) -> bool override;
 
  private:
   /** The index scan plan node to be executed. */
   const IndexScanPlanNode *plan_;
+  IndexIterator<bustub::GenericKey<4>, bustub::RID, bustub::GenericComparator<4>> cur_;
+  IndexInfo *index_info_;
 };
 }  // namespace bustub
+
+/*
+You can then construct index iterator from the index object, scan through all the keys and tuple IDs, lookup the tuple
+from the table heap, and emit all tuples in the index key's order as the output of the executor. BusTub only supports
+indexes with a single, unique integer column. There will not be duplicate keys in the test cases.
+*/

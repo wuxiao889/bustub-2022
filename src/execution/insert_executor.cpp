@@ -27,6 +27,11 @@ InsertExecutor::InsertExecutor(ExecutorContext *exec_ctx, const InsertPlanNode *
 void InsertExecutor::Init() { child_executor_->Init(); }
 
 auto InsertExecutor::Next(Tuple *tuple, RID *rid) -> bool {
+  if (inserted_) {
+    return false;
+  }
+  inserted_ = true;
+
   Tuple child_tuple{};
   ExecutorContext *ctx = GetExecutorContext();
   Transaction *txn = ctx->GetTransaction();
@@ -40,7 +45,6 @@ auto InsertExecutor::Next(Tuple *tuple, RID *rid) -> bool {
     if (ok) {
       cnt++;
       std::vector<IndexInfo *> index_infos = exec_ctx_->GetCatalog()->GetTableIndexes(table_info->name_);
-
       for (auto index_info : index_infos) {
         auto new_key = child_tuple.KeyFromTuple(table_info->schema_, *index_info->index_->GetKeySchema(),
                                                 index_info->index_->GetKeyAttrs());
@@ -50,13 +54,9 @@ auto InsertExecutor::Next(Tuple *tuple, RID *rid) -> bool {
   }
 
   std::vector<Value> values;
-  if (cnt != 0) {
-    values.emplace_back(TypeId::INTEGER, cnt);
-    *tuple = Tuple{values, &plan_->OutputSchema()};
-    return true;
-  }
-
-  return false;
+  values.emplace_back(TypeId::INTEGER, cnt);
+  *tuple = Tuple{values, &plan_->OutputSchema()};
+  return true;
 }
 
 }  // namespace bustub

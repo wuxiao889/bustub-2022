@@ -62,6 +62,8 @@ class InsertExecutor : public AbstractExecutor {
 
   /** The exactly one child producing values to be inserted into the table. */
   std::unique_ptr<AbstractExecutor> child_executor_;
+  
+  bool inserted_{};
 };
 
 }  // namespace bustub

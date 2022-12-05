@@ -22,7 +22,7 @@ auto ValuesExecutor::Next(Tuple *tuple, RID *rid) -> bool {
     values.push_back(col->Evaluate(nullptr, dummy_schema_));
   }
   *tuple = Tuple{values, &GetOutputSchema()};
-  LOG_DEBUG("%s\n", tuple->ToString(&GetOutputSchema()).c_str());
+  // LOG_DEBUG("%s\n", tuple->ToString(&GetOutputSchema()).c_str());
   cursor_ += 1;
 
   return true;

@@ -20,9 +20,13 @@ DeleteExecutor::DeleteExecutor(ExecutorContext *exec_ctx, const DeletePlanNode *
                                std::unique_ptr<AbstractExecutor> &&child_executor)
     : AbstractExecutor(exec_ctx), plan_(plan), child_executor_(std::move(child_executor)) {}
 
-void DeleteExecutor::Init() { throw NotImplementedException("DeleteExecutor is not implemented"); }
+void DeleteExecutor::Init() { child_executor_->Init(); }
 
 auto DeleteExecutor::Next(Tuple *tuple, RID *rid) -> bool {
+  if (deleted_) {
+    return false;
+  }
+  deleted_ = true;
   Tuple child_tuple{};
   ExecutorContext *ctx = GetExecutorContext();
   Transaction *txn = ctx->GetTransaction();
@@ -46,13 +50,9 @@ auto DeleteExecutor::Next(Tuple *tuple, RID *rid) -> bool {
   }
 
   std::vector<Value> values;
-  if (cnt != 0) {
-    values.emplace_back(TypeId::INTEGER, cnt);
-    *tuple = Tuple{values, &plan_->OutputSchema()};
-    return true;
-  }
-
-  return false;
+  values.emplace_back(TypeId::INTEGER, cnt);
+  *tuple = Tuple{values, &plan_->OutputSchema()};
+  return true;
 }
 
 }  // namespace bustub
