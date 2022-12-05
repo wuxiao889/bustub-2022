@@ -28,6 +28,7 @@ auto GetMockTableSchemaOf(const std::string &table) -> Schema;
 
 /**
  * The MockScanExecutor executor executes a sequential table scan for tests.
+ * generate the same tuples using a predefined algorithm.
  */
 class MockScanExecutor : public AbstractExecutor {
  public:
