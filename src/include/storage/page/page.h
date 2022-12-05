@@ -53,24 +53,24 @@ class Page {
   /** Acquire the page write latch. */
   inline void WLatch() {
     rwlatch_.WLock();
-    // LOG_INFO("%d page %d WLatch %d\n", ::gettid(), page_id_, pin_count_);
+    // LOG_DEBUG("%d page %d WLatch %d\n", ::gettid(), page_id_, pin_count_);
   }
 
   /** Release the page write latch. */
   inline void WUnlatch() {
-    // LOG_INFO("%d page %d WUnlatch() %d\n", ::gettid(), page_id_, pin_count_ - 1);
+    // LOG_DEBUG("%d page %d WUnlatch() %d\n", ::gettid(), page_id_, pin_count_ - 1);
     rwlatch_.WUnlock();
   }
 
   /** Acquire the page read latch. */
   inline void RLatch() {
     rwlatch_.RLock();
-    // LOG_INFO("%d page %d RLatch() %d\n", ::gettid(), page_id_, pin_count_);
+    // LOG_DEBUG("%d page %d RLatch() %d\n", ::gettid(), page_id_, pin_count_);
   }
 
   /** Release the page read latch. */
   inline void RUnlatch() {
-    // LOG_INFO("%d page %d RUnlatch()%d\n", ::gettid(), page_id_, pin_count_ - 1);
+    // LOG_DEBUG("%d page %d RUnlatch()%d\n", ::gettid(), page_id_, pin_count_ - 1);
     rwlatch_.RUnlock();
   }
 

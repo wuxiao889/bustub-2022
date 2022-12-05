@@ -767,13 +767,29 @@ void BPLUSTREE_TYPE::UnlockRoot(bool &root_locked) {
  */
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::Begin() -> INDEXITERATOR_TYPE {
-  std::lock_guard lock(latch_);
+  latch_.lock();
   if (IsEmpty()) {
+    latch_.unlock();
     return {};
   }
+  if (left_most_ != root_page_id_) {
+    latch_.unlock();
+    Page *page = buffer_pool_manager_->FetchPage(left_most_);
+    auto node = CastLeafPage(page);
+    page->RLatch();
+    MappingType value = (*node)[0];
+    page->RUnlatch();
+    buffer_pool_manager_->UnpinPage(left_most_, false);
+    return Iterator{left_most_, 0, buffer_pool_manager_, value};
+  }
   Page *page = buffer_pool_manager_->FetchPage(left_most_);
+  auto node = CastLeafPage(page);
   page->RLatch();
-  return Iterator{page, 0, buffer_pool_manager_};
+  MappingType value = (*node)[0];
+  page->RUnlatch();
+  buffer_pool_manager_->UnpinPage(left_most_, false);
+  latch_.unlock();
+  return Iterator{left_most_, 0, buffer_pool_manager_, value};
 }
 
 /*
@@ -789,12 +805,19 @@ auto BPLUSTREE_TYPE::Begin(const KeyType &key) -> INDEXITERATOR_TYPE {
   if (page == nullptr) {
     return {};
   }
+
   LeafPage *leaf_node = CastLeafPage(page);
   int index = leaf_node->LowerBound(key, comparator_);
   if (index == leaf_node->GetSize()) {
+    page->RUnlatch();
+    buffer_pool_manager_->UnpinPage(page->GetPageId(), false);
     return End();
   }
-  return {page, index, buffer_pool_manager_};
+  MappingType value = (*leaf_node)[index];
+  page_id_t page_id = page->GetPageId();
+  page->RUnlatch();
+  buffer_pool_manager_->UnpinPage(page->GetPageId(), false);
+  return {page_id, index, buffer_pool_manager_, value};
 }
 
 /*

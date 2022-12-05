@@ -14,7 +14,9 @@
  */
 #pragma once
 #include "buffer/buffer_pool_manager.h"
+#include "common/config.h"
 #include "storage/page/b_plus_tree_leaf_page.h"
+#include "storage/page/b_plus_tree_page.h"
 
 namespace bustub {
 
@@ -31,27 +33,31 @@ class IndexIterator {
  public:
   // you may define your own constructor based on your member variables
   IndexIterator();
-  IndexIterator(Page *page, int position, BufferPoolManager *buffer_pool_manager);
+  IndexIterator(page_id_t page_id, int position, BufferPoolManager *buffer_pool_manager, MappingType value);
   IndexIterator(const IndexIterator &x);
 
   ~IndexIterator();
-
-  auto IsEnd() -> bool;
 
   auto operator*() -> const MappingType &;
 
   auto operator++() -> IndexIterator &;
 
-  auto operator==(const IndexIterator &itr) const -> bool { return page_ == itr.page_ && position_ == itr.position_; }
+  auto operator==(const IndexIterator &itr) const -> bool {
+    return page_id_ == itr.page_id_ && position_ == itr.position_ && buffer_pool_manager_ == itr.buffer_pool_manager_;
+  }
 
   auto operator!=(const IndexIterator &itr) const -> bool { return !operator==(itr); }
 
  private:
   // add your own private member variables here
-  Tree *tree_{};
-  Page *page_{};
-  int position_{};
+  // Tree *tree_{};
+  page_id_t page_id_{INVALID_PAGE_ID};
+  int position_{0};
   BufferPoolManager *buffer_pool_manager_{};
+  MappingType value_;
+  Page *cur_page_;
+
+  auto IsEnd() -> bool;
 };
 
 }  // namespace bustub
