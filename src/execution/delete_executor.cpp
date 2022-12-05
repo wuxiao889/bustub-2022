@@ -18,10 +18,48 @@ namespace bustub {
 
 DeleteExecutor::DeleteExecutor(ExecutorContext *exec_ctx, const DeletePlanNode *plan,
                                std::unique_ptr<AbstractExecutor> &&child_executor)
-    : AbstractExecutor(exec_ctx) {}
+    : AbstractExecutor(exec_ctx), plan_(plan), child_executor_(std::move(child_executor)) {}
 
 void DeleteExecutor::Init() { throw NotImplementedException("DeleteExecutor is not implemented"); }
 
-auto DeleteExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool { return false; }
+auto DeleteExecutor::Next(Tuple *tuple, RID *rid) -> bool {
+  Tuple child_tuple{};
+  ExecutorContext *ctx = GetExecutorContext();
+  Transaction *txn = ctx->GetTransaction();
+  TableInfo *table_info = ctx->GetCatalog()->GetTable(plan_->table_oid_);
+
+  int cnt = 0;
+
+  while (child_executor_->Next(&child_tuple, rid)) {
+    auto ok = table_info->table_->MarkDelete(*rid, txn);
+
+    if (ok) {
+      cnt++;
+      std::vector<IndexInfo *> index_infos = exec_ctx_->GetCatalog()->GetTableIndexes(table_info->name_);
+
+      for (auto index_info : index_infos) {
+        auto new_key = child_tuple.KeyFromTuple(table_info->schema_, *index_info->index_->GetKeySchema(),
+                                                index_info->index_->GetKeyAttrs());
+        index_info->index_->DeleteEntry(new_key, *rid, txn);
+      }
+    }
+  }
+
+  std::vector<Value> values;
+  if (cnt != 0) {
+    values.emplace_back(TypeId::INTEGER, cnt);
+    *tuple = Tuple{values, &plan_->OutputSchema()};
+    return true;
+  }
+
+  return false;
+}
 
 }  // namespace bustub
+
+/*
+
+Hint: You only need to get a RID from the child executor and call TableHeap::MarkDelete() to effectively delete the
+tuple. All deletes will be applied upon transaction commit.
+
+*/

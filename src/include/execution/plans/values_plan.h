@@ -52,3 +52,59 @@ class ValuesPlanNode : public AbstractPlanNode {
 };
 
 }  // namespace bustub
+
+/*
+bustub> EXPLAIN values (1, 2, 'a'), (3, 4, 'b');
+ === BINDER ===
+ BoundSelect {
+   table=BoundExpressionListRef { identifier=__values#0, values=[[1, 2, a], [3, 4, b]] },
+   columns=[__values#0.0, __values#0.1, __values#0.2],
+   groupBy=[],
+   having=,
+   where=,
+   limit=,
+   offset=,
+   order_by=[],
+   is_distinct=false,
+   ctes=,
+ }
+ === PLANNER ===
+ Projection { exprs=[#0.0, #0.1, #0.2] } | (__values#0.0:INTEGER, __values#0.1:INTEGER, __values#0.2:VARCHAR)
+   Values { rows=2 } | (__values#0.0:INTEGER, __values#0.1:INTEGER, __values#0.2:VARCHAR)
+ === OPTIMIZER ===
+ Values { rows=2 } | (__values#0.0:INTEGER, __values#0.1:INTEGER, __values#0.2:VARCHAR)
+
+bustub> values (1, 2, 'a'), (3, 4, 'b');
++--------------+--------------+--------------+
+| __values#0.0 | __values#0.1 | __values#0.2 |
++--------------+--------------+--------------+
+| 1            | 2            | a            |
+| 3            | 4            | b            |
++--------------+--------------+--------------+
+bustub> CREATE TABLE table1(v1 INT, v2 INT, v3 VARCHAR(128));
+ Table created with id = 23
+bustub> EXPLAIN INSERT INTO table1 VALUES (1, 2, 'a'), (3, 4, 'b');
+ === BINDER ===
+ BoundInsert {
+   table=BoundBaseTableRef { table=table1, oid=23 },
+   select=  BoundSelect {
+     table=BoundExpressionListRef { identifier=__values#0, values=[[1, 2, a], [3, 4, b]] },
+     columns=[__values#0.0, __values#0.1, __values#0.2],
+     groupBy=[],
+     having=,
+     where=,
+     limit=,
+     offset=,
+     order_by=[],
+     is_distinct=false,
+     ctes=,
+   }
+ }
+ === PLANNER ===
+ Insert { table_oid=23 } | (__bustub_internal.insert_rows:INTEGER)
+   Projection { exprs=[#0.0, #0.1, #0.2] } | (__values#0.0:INTEGER, __values#0.1:INTEGER, __values#0.2:VARCHAR)
+     Values { rows=2 } | (__values#0.0:INTEGER, __values#0.1:INTEGER, __values#0.2:VARCHAR)
+ === OPTIMIZER ===
+ Insert { table_oid=23 } | (__bustub_internal.insert_rows:INTEGER)
+   Values { rows=2 } | (__values#0.0:INTEGER, __values#0.1:INTEGER, __values#0.2:VARCHAR)
+*/

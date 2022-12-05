@@ -26,7 +26,7 @@ class BPlusTree;
 template <typename KeyType, typename ValueType, typename KeyComparator>
 class IndexIterator {
   using LeafPage = BPlusTreeLeafPage<KeyType, ValueType, KeyComparator>;
-  using Tree = BPlusTree<KeyType,ValueType,KeyComparator>;
+  using Tree = BPlusTree<KeyType, ValueType, KeyComparator>;
 
  public:
   // you may define your own constructor based on your member variables
@@ -48,7 +48,7 @@ class IndexIterator {
 
  private:
   // add your own private member variables here
-  Tree* tree_{};
+  Tree *tree_{};
   Page *page_{};
   int position_{};
   BufferPoolManager *buffer_pool_manager_{};

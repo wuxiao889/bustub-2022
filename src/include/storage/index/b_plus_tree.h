@@ -45,7 +45,6 @@ class BPlusTree {
   using Iterator = IndexIterator<KeyType, ValueType, KeyComparator>;
 
   friend class IndexIterator<KeyType, ValueType, KeyComparator>;
-  
   enum Operation { FIND, INSERT, REMOVE };
 
  public:

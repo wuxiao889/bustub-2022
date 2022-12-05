@@ -161,7 +161,7 @@ auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::InsertAt(int index, const KeyType &key, con
 }
 
 INDEX_TEMPLATE_ARGUMENTS
-void B_PLUS_TREE_INTERNAL_PAGE_TYPE::Split(BPlusTreeInternalPage *new_node, const KeyType &key,const ValueType& value,
+void B_PLUS_TREE_INTERNAL_PAGE_TYPE::Split(BPlusTreeInternalPage *new_node, const KeyType &key, const ValueType &value,
                                            const KeyComparator &comparator) {
   // 找一个更大的空间存储，二分 然后插入
   std::vector<MappingType> vec(array_, array_ + GetMaxSize());

@@ -803,9 +803,7 @@ auto BPLUSTREE_TYPE::Begin(const KeyType &key) -> INDEXITERATOR_TYPE {
  * @return : index iterator
  */
 INDEX_TEMPLATE_ARGUMENTS
-auto BPLUSTREE_TYPE::End() -> INDEXITERATOR_TYPE {
-  return {};
-}
+auto BPLUSTREE_TYPE::End() -> INDEXITERATOR_TYPE { return {}; }
 
 /**
  * @return Page id of the root of this tree
