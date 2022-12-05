@@ -52,7 +52,14 @@ INDEX_TEMPLATE_ARGUMENTS
 auto INDEXITERATOR_TYPE::operator++() -> INDEXITERATOR_TYPE & {
   assert(page_ != nullptr);
   auto node = reinterpret_cast<LeafPage *>(page_->GetData());
-  if (++position_ != node->GetSize() || IsEnd()) {
+  if (++position_ != node->GetSize()) {
+    return *this;
+  }
+  if (IsEnd()) {
+    INDEXITERATOR_TYPE tmp{};
+    page_->RUnlatch();
+    buffer_pool_manager_->UnpinPage(page_->GetPageId(), false);
+    *this = tmp;
     return *this;
   }
   page_->RUnlatch();

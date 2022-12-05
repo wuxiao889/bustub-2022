@@ -804,14 +804,7 @@ auto BPLUSTREE_TYPE::Begin(const KeyType &key) -> INDEXITERATOR_TYPE {
  */
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::End() -> INDEXITERATOR_TYPE {
-  std::lock_guard lock(latch_);
-  if (IsEmpty()) {
-    return {};
-  }
-  Page *page = buffer_pool_manager_->FetchPage(right_most_);
-  BPlusTreePage *node = CastBPlusPage(page);
-  page->RLatch();
-  return Iterator{page, node->GetSize(), buffer_pool_manager_};
+  return {};
 }
 
 /**
