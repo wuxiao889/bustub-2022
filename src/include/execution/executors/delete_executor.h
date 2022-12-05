@@ -50,7 +50,7 @@ class DeleteExecutor : public AbstractExecutor {
    * NOTE: DeleteExecutor::Next() does not use the `rid` out-parameter.
    * NOTE: DeleteExecutor::Next() returns true with the number of deleted rows produced only once.
    */
-  auto Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool override;
+  auto Next(Tuple *tuple, RID *rid) -> bool override;
 
   /** @return The output schema for the delete */
   auto GetOutputSchema() const -> const Schema & override { return plan_->OutputSchema(); };

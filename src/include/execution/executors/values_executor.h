@@ -57,3 +57,11 @@ class ValuesExecutor : public AbstractExecutor {
   size_t cursor_{0};
 };
 }  // namespace bustub
+
+/*
+
+EXPLAIN values (1, 2, 'a'), (3, 4, 'b');
+CREATE TABLE table1(v1 INT, v2 INT, v3 VARCHAR(128));
+EXPLAIN INSERT INTO table1 VALUES (1, 2, 'a'), (3, 4, 'b');
+
+*/
