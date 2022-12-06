@@ -27,11 +27,12 @@ AggregationExecutor::AggregationExecutor(ExecutorContext *exec_ctx, const Aggreg
       child_executor_(std::move(child)),
       aht_(plan->GetAggregates(), plan->GetAggregateTypes()),
       aht_iterator_(aht_.Begin()) {
-  fmt::print("{}\n", plan_->ToString());
+  // fmt::print("{}\n", plan_->ToString());
 }
 
 void AggregationExecutor::Init() {
   child_executor_->Init();
+  aht_.Clear();
   Tuple child_tuple;
   RID rid;
   // fmt::print("Agg group_by size:{}\n", plan_->GetGroupBys().size());
