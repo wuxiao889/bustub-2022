@@ -389,7 +389,7 @@ MockScanExecutor::MockScanExecutor(ExecutorContext *exec_ctx, const MockScanPlan
     std::mt19937 g(rd());
     std::shuffle(shuffled_idx_.begin(), shuffled_idx_.end(), g);
   }
-  fmt::print("{}\n", plan_->ToString());
+  // fmt::print("{}\n", plan_->ToString());
 }
 
 void MockScanExecutor::Init() {
@@ -409,7 +409,7 @@ auto MockScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
   }
   ++cursor_;
   *rid = MakeDummyRID();
-  LOG_DEBUG("%s\n", tuple->ToString(&GetOutputSchema()).c_str());
+  // LOG_DEBUG("%s\n", tuple->ToString(&GetOutputSchema()).c_str());
   return EXECUTOR_ACTIVE;
 }
 
