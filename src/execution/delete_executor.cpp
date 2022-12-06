@@ -13,6 +13,7 @@
 #include <memory>
 
 #include "execution/executors/delete_executor.h"
+#include "type/value_factory.h"
 
 namespace bustub {
 
@@ -27,6 +28,7 @@ auto DeleteExecutor::Next(Tuple *tuple, RID *rid) -> bool {
     return false;
   }
   deleted_ = true;
+  
   Tuple child_tuple{};
   ExecutorContext *ctx = GetExecutorContext();
   Transaction *txn = ctx->GetTransaction();
@@ -50,7 +52,7 @@ auto DeleteExecutor::Next(Tuple *tuple, RID *rid) -> bool {
   }
 
   std::vector<Value> values;
-  values.emplace_back(TypeId::INTEGER, cnt);
+  values.emplace_back(ValueFactory::GetIntegerValue(cnt));
   *tuple = Tuple{values, &plan_->OutputSchema()};
   return true;
 }

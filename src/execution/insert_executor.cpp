@@ -17,12 +17,15 @@
 #include "storage/table/tuple.h"
 #include "type/type_id.h"
 #include "type/value.h"
+#include "type/value_factory.h"
 
 namespace bustub {
 
 InsertExecutor::InsertExecutor(ExecutorContext *exec_ctx, const InsertPlanNode *plan,
                                std::unique_ptr<AbstractExecutor> &&child_executor)
-    : AbstractExecutor(exec_ctx), plan_(plan), child_executor_(std::move(child_executor)) {}
+    : AbstractExecutor(exec_ctx), plan_(plan), child_executor_(std::move(child_executor)) {
+  fmt::print("{}\n", plan_->ToString());
+}
 
 void InsertExecutor::Init() { child_executor_->Init(); }
 
@@ -54,7 +57,7 @@ auto InsertExecutor::Next(Tuple *tuple, RID *rid) -> bool {
   }
 
   std::vector<Value> values;
-  values.emplace_back(TypeId::INTEGER, cnt);
+  values.emplace_back(ValueFactory::GetIntegerValue(cnt));
   *tuple = Tuple{values, &plan_->OutputSchema()};
   return true;
 }
