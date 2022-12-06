@@ -25,6 +25,7 @@
 #include "execution/executors/mock_scan_executor.h"
 #include "execution/expressions/abstract_expression.h"
 #include "execution/plans/abstract_plan.h"
+#include "fmt/color.h"
 #include "fmt/core.h"
 #include "fmt/format.h"
 #include "optimizer/optimizer.h"
@@ -323,6 +324,7 @@ auto BustubInstance::ExecuteSqlTxn(const std::string &sql, ResultWriter &writer,
     // Execute the query.
     auto exec_ctx = MakeExecutorContext(txn);
     std::vector<Tuple> result_set{};
+    fmt::print(fmt::fg(fmt::color::medium_blue) | fmt::emphasis::bold, "{}\n", optimized_plan->ToString());
     is_successful &= execution_engine_->Execute(optimized_plan, &result_set, txn, exec_ctx.get());
 
     // Return the result set as a vector of string.

@@ -28,6 +28,7 @@ auto SeqScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
     *tuple = *cur_;
     *rid = cur_->GetRid();
     cur_++;
+    // fmt::print("SeqScanExecutor::Next {}\n", tuple->ToString(&plan_->OutputSchema()));
     return true;
   }
   return false;

@@ -99,7 +99,6 @@ auto NestedLoopJoinExecutor::Next(Tuple *tuple, RID *rid) -> bool {
 
     AnotherLoop();
   }
-  return false;
 }
 
 void NestedLoopJoinExecutor::AnotherLoop() {
