@@ -18,9 +18,9 @@ SeqScanExecutor::SeqScanExecutor(ExecutorContext *exec_ctx, const SeqScanPlanNod
     : AbstractExecutor(exec_ctx),
       plan_(plan),
       table_info_(exec_ctx->GetCatalog()->GetTable(plan->GetTableOid())),
-      cur_(table_info_->table_->Begin(exec_ctx->GetTransaction())) {}
-      
-void SeqScanExecutor::Init() {}
+      cur_(nullptr, {}, nullptr) {}
+
+void SeqScanExecutor::Init() { cur_ = table_info_->table_->Begin(exec_ctx_->GetTransaction()); }
 
 auto SeqScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
   auto end = table_info_->table_->End();

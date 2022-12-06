@@ -31,9 +31,9 @@ auto IndexScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
   if (cur_ != end) {
     *rid = (*cur_).second;
     table_page = reinterpret_cast<TablePage *>(bpm->FetchPage(rid->GetPageId())->GetData());
+    // assert?
     table_page->GetTuple(*rid, tuple, exec_ctx_->GetTransaction(), exec_ctx_->GetLockManager());
     bpm->UnpinPage(rid->GetPageId(), false);
-    // assert(true) ???
     ++cur_;
     return true;
   }
