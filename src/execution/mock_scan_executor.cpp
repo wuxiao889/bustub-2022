@@ -409,7 +409,7 @@ auto MockScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
   }
   ++cursor_;
   *rid = MakeDummyRID();
-  // LOG_DEBUG("%s\n", tuple->ToString(&GetOutputSchema()).c_str());
+  // fmt::print("mock {}\n", tuple->ToString(&GetOutputSchema()));
   return EXECUTOR_ACTIVE;
 }
 
