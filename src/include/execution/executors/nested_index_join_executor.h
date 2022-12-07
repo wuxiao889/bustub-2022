@@ -58,7 +58,6 @@ class NestIndexJoinExecutor : public AbstractExecutor {
 };
 }  // namespace bustub
 
-
 /*
 The DBMS will use NestedIndexJoinPlanNode if the query contains a join with an equi-condition and the right side of the
 join has an index over the condition.

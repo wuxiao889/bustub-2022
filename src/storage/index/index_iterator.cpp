@@ -2,7 +2,7 @@
  * index_iterator.cpp
  */
 #include <cassert>
-#include <mutex>
+#include <mutex>  // NOLINT
 
 #include "buffer/buffer_pool_manager.h"
 #include "common/config.h"
@@ -22,7 +22,7 @@ INDEXITERATOR_TYPE::IndexIterator() = default;
 INDEX_TEMPLATE_ARGUMENTS
 INDEXITERATOR_TYPE::IndexIterator(page_id_t page_id, int position, BufferPoolManager *buffer_pool_manager,
                                   MappingType value)
-    : page_id_(page_id), position_(position), buffer_pool_manager_(buffer_pool_manager), value_(value) {}
+    : page_id_(page_id), position_(position), buffer_pool_manager_(buffer_pool_manager), value_(std::move(value)) {}
 
 INDEX_TEMPLATE_ARGUMENTS
 INDEXITERATOR_TYPE::IndexIterator(const IndexIterator &x)

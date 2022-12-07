@@ -27,15 +27,15 @@ void SortExecutor::Init() {
   auto &order_bys = plan_->GetOrderBy();
 
   while (child_executor_->Next(&tuple, &rid)) {
-    result_.push_back({tuple, rid});
+    result_.emplace_back(tuple, rid);
   }
 
   std::sort(result_.begin(), result_.end(), [&](auto &left, auto &right) {
     Tuple &left_tuple = left.first;
     Tuple &right_tuple = right.first;
     // fmt::print("{} {}\n", left_tuple.ToString(&schema), right_tuple.ToString(&schema));
-    for (auto &[type, expr] : order_bys) {
-      Assert(type != OrderByType::INVALID);
+    for (auto &[order_type, expr] : order_bys) {
+      Assert(order_type != OrderByType::INVALID);
       Value left_key = expr->Evaluate(&left_tuple, schema);
       Value right_key = expr->Evaluate(&right_tuple, schema);
 
@@ -44,7 +44,7 @@ void SortExecutor::Init() {
         continue;
       }
       // fmt::print("\t{} {} less? {}\n", left_key, right_key, less);
-      return type == OrderByType::ASC || type == OrderByType::DEFAULT
+      return order_type == OrderByType::ASC || order_type == OrderByType::DEFAULT
                  ? left_key.CompareLessThan(right_key) == CmpBool::CmpTrue
                  : left_key.CompareGreaterThan(right_key) == CmpBool::CmpTrue;
     }

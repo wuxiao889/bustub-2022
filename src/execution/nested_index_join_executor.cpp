@@ -26,7 +26,6 @@ NestIndexJoinExecutor::NestIndexJoinExecutor(ExecutorContext *exec_ctx, const Ne
     // Note for 2022 Fall: You ONLY need to implement left join and inner join.
     throw bustub::NotImplementedException(fmt::format("join type {} not supported", plan->GetJoinType()));
   }
-  // fmt::print("{}\n", plan->ToString());
 }
 
 void NestIndexJoinExecutor::Init() { child_executor_->Init(); }

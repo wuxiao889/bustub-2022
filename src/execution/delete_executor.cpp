@@ -28,7 +28,7 @@ auto DeleteExecutor::Next(Tuple *tuple, RID *rid) -> bool {
     return false;
   }
   deleted_ = true;
-  
+
   Tuple child_tuple{};
   ExecutorContext *ctx = GetExecutorContext();
   Transaction *txn = ctx->GetTransaction();
@@ -37,9 +37,9 @@ auto DeleteExecutor::Next(Tuple *tuple, RID *rid) -> bool {
   int cnt = 0;
 
   while (child_executor_->Next(&child_tuple, rid)) {
-    auto ok = table_info->table_->MarkDelete(*rid, txn);
+    auto status = table_info->table_->MarkDelete(*rid, txn);
 
-    if (ok) {
+    if (status) {
       cnt++;
       std::vector<IndexInfo *> index_infos = exec_ctx_->GetCatalog()->GetTableIndexes(table_info->name_);
 

@@ -11,6 +11,7 @@
 #include "common/bustub_instance.h"
 #include "common/exception.h"
 #include "common/util/string_util.h"
+#include "fmt/color.h"
 #include "fmt/core.h"
 #include "fmt/ranges.h"
 #include "parser.h"

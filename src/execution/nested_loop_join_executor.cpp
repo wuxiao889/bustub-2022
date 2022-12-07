@@ -41,7 +41,7 @@ NestedLoopJoinExecutor::NestedLoopJoinExecutor(ExecutorContext *exec_ctx, const 
 void NestedLoopJoinExecutor::Init() {
   left_child_executor_->Init();
   right_child_executor_->Init();
-  
+
   // TODO(wxx) implement BLOCK NESTED LOOP JOIN
   // auto left_ctx = left_child_executor_->GetExecutorContext();
   // auto right_ctx = right_child_executor_->GetExecutorContext();

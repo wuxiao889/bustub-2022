@@ -100,8 +100,6 @@ class SimpleAggregationHashTable {
 
       switch (agg_types_[i]) {
         case AggregationType::CountStarAggregate:
-          result_agg = result_agg.Add(ValueFactory::GetIntegerValue(1));
-          break;
         case AggregationType::CountAggregate:
           result_agg = result_agg.Add(ValueFactory::GetIntegerValue(1));
           break;

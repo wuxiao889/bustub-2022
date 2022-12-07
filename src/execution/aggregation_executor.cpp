@@ -26,9 +26,7 @@ AggregationExecutor::AggregationExecutor(ExecutorContext *exec_ctx, const Aggreg
       plan_(plan),
       child_executor_(std::move(child)),
       aht_(plan->GetAggregates(), plan->GetAggregateTypes()),
-      aht_iterator_(aht_.Begin()) {
-  // fmt::print("{}\n", plan_->ToString());
-}
+      aht_iterator_(aht_.Begin()) {}
 
 void AggregationExecutor::Init() {
   child_executor_->Init();

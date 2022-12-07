@@ -39,11 +39,11 @@ auto Optimizer::OptimizeOrderByAsIndexScan(const AbstractPlanNodeRef &plan) -> A
 
     // Order type is asc or default
     const auto &[order_type, expr] = order_bys[0];
-    if (!(order_type == OrderByType::ASC || order_type == OrderByType::DEFAULT)) {
+    if (order_type != OrderByType::ASC && order_type != OrderByType::DEFAULT) {
       return optimized_plan;
     }
 
-    // Order expression is a column value expression
+    // Order expression is a column value expression (i.e.) ORDEY BY 1
     const auto *column_value_expr = dynamic_cast<ColumnValueExpression *>(expr.get());
     if (column_value_expr == nullptr) {
       return optimized_plan;

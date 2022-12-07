@@ -204,7 +204,9 @@ class TrieNodeWithValue : public TrieNode {
    * @param trieNode TrieNode whose data is to be moved to TrieNodeWithValue
    * @param value
    */
-  TrieNodeWithValue(TrieNode &&trieNode, T value) : TrieNode(std::move(trieNode)), value_(value) { SetEndNode(true); }
+  TrieNodeWithValue(TrieNode &&trieNode, T value) : TrieNode(std::move(trieNode)), value_(std::move(value)) {
+    SetEndNode(true);
+  }
 
   /**
    * TODO(P0): Add implementation
@@ -219,7 +221,7 @@ class TrieNodeWithValue : public TrieNode {
    * @param key_char Key char of this node
    * @param value Value of this node
    */
-  TrieNodeWithValue(char key_char, T value) : TrieNode(key_char), value_(value) { SetEndNode(true); }
+  TrieNodeWithValue(char key_char, T value) : TrieNode(key_char), value_(std::move(value)) { SetEndNode(true); }
 
   /**
    * @brief Destroy the Trie FrameInfo With Value object
