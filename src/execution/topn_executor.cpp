@@ -19,9 +19,9 @@ void TopNExecutor::Init() {
   const auto &schema = plan_->OutputSchema();
   const auto &order_bys = plan_->GetOrderBy();
 
-  auto pred = [&](auto &left, auto &right) -> bool {
-    Tuple &left_tuple = left.first;
-    Tuple &right_tuple = right.first;
+  auto pred = [&](const auto &left, const auto &right) -> bool {
+    const Tuple &left_tuple = left.first;
+    const Tuple &right_tuple = right.first;
     for (auto &[order_type, expr] : order_bys) {
       Value left_key = expr->Evaluate(&left_tuple, schema);
       Value right_key = expr->Evaluate(&right_tuple, schema);
@@ -51,7 +51,7 @@ void TopNExecutor::Init() {
         std::push_heap(heap_.begin(), heap_.end(), pred);
       }
     } else {
-      heap_.push_back(tmp);
+      heap_.emplace_back(tuple, rid);
       std::push_heap(heap_.begin(), heap_.end(), pred);
     }
   }

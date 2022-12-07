@@ -12,16 +12,19 @@
 
 #pragma once
 
+#include <cstddef>
+#include <cstdint>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "binder/table_ref/bound_join_ref.h"
+#include "common/util/hash_util.h"
 #include "execution/expressions/abstract_expression.h"
 #include "execution/plans/abstract_plan.h"
+#include "type/type.h"
 
 namespace bustub {
-
 /**
  * Hash join performs a JOIN operation with a hash table.
  */

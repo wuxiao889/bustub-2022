@@ -81,10 +81,8 @@ class SimpleAggregationHashTable {
     for (uint32_t i = 0; i < agg_exprs_.size(); i++) {
       auto &result_agg = result->aggregates_[i];
       auto &input_agg = input.aggregates_[i];
-
       // fmt::print("{}:{} aggtype:{:12} preval:{:8} val:{:8}\n", "CombineAggregateValues()", __LINE__, agg_types_[i],
       //            result_agg, input_agg);
-
       if (input_agg.IsNull()) {
         continue;
       }
