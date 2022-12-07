@@ -16,6 +16,7 @@
 #include <cstdint>
 #include <memory>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -30,6 +31,7 @@ namespace bustub {
 
 struct JoinKey {
   Value key_;
+  JoinKey() = default;
   explicit JoinKey(const Value &key) : key_(key) {}
   /**
    * Compares two join keys for equality.
@@ -89,8 +91,11 @@ class HashJoinExecutor : public AbstractExecutor {
   std::unique_ptr<AbstractExecutor> left_child_executor_;
   std::unique_ptr<AbstractExecutor> right_child_executor_;
 
-  std::unordered_map<JoinKey, std::vector<Tuple>> ht_;
+  std::unordered_map<JoinKey, std::vector<Tuple>> left_ht_;
+  std::unordered_set<JoinKey> not_joined_;
+
   bool build_;
+  bool right_finished_;
 
   uint64_t cur_index_;
   std::vector<Tuple> *cur_vec_;
@@ -98,7 +103,8 @@ class HashJoinExecutor : public AbstractExecutor {
 
   auto Insert(const Tuple &tuple) {
     JoinKey key = MakeLeftJoinKey(&tuple);
-    ht_[key].emplace_back(tuple);
+    left_ht_[key].emplace_back(tuple);
+    not_joined_.insert(key);
   }
 
   auto MakeLeftJoinKey(const Tuple *tuple) -> JoinKey {

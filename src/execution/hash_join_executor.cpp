@@ -29,6 +29,7 @@ HashJoinExecutor::HashJoinExecutor(ExecutorContext *exec_ctx, const HashJoinPlan
       left_child_executor_(std::move(left_child)),
       right_child_executor_(std::move(right_child)),
       build_(false),
+      right_finished_(false),
       cur_index_(0),
       cur_vec_(nullptr) {
   if (plan->GetJoinType() != JoinType::LEFT && plan->GetJoinType() != JoinType::INNER) {
@@ -62,7 +63,14 @@ auto HashJoinExecutor::Next(Tuple *tuple, RID *rid) -> bool {
   while (true) {
     if (cur_vec_ != nullptr && cur_index_ < cur_vec_->size()) {
       const auto &left_tupe = cur_vec_->at(cur_index_);
-      std::vector<Value> values = GenerateValue(&left_tupe, left_schema, &right_tuple_, right_schema);
+      std::vector<Value> values;
+
+      if (right_finished_) {
+        values = GenerateValue(&left_tupe, left_schema, nullptr, right_schema);
+      } else {
+        values = GenerateValue(&left_tupe, left_schema, &right_tuple_, right_schema);
+      }
+
       *tuple = {values, &plan_->OutputSchema()};
       cur_index_++;
       return true;
@@ -72,16 +80,32 @@ auto HashJoinExecutor::Next(Tuple *tuple, RID *rid) -> bool {
     cur_vec_ = nullptr;
     cur_index_ = 0;
 
+    JoinKey key;
+
     const auto status = right_child_executor_->Next(&right_tuple_, rid);
     if (!status) {
-      return false;
+      if (plan_->join_type_ == JoinType::INNER) {
+        return false;
+      }
+
+      right_finished_ = true;
+      auto not_joined_it = not_joined_.begin();
+      if (not_joined_it != not_joined_.end()) {
+        key = *not_joined_it;
+      } else {
+        return false;
+      }
     }
 
-    JoinKey right_key = MakeRightJoinKey(&right_tuple_);
-    auto it = ht_.find(right_key);
+    if (!right_finished_) {
+      key = MakeRightJoinKey(&right_tuple_);
+    }
 
-    if (it != ht_.end()) {
-      cur_vec_ = &(it->second);
+    auto left_ht_it = left_ht_.find(key);
+
+    if (left_ht_it != left_ht_.end()) {
+      not_joined_.erase(key);
+      cur_vec_ = &(left_ht_it->second);
     }
   }
 }

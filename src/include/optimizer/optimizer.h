@@ -66,9 +66,14 @@ class Optimizer {
   auto OptimizeMergeFilterScan(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef;
 
   /**
-   * @brief rewrite expression to be used in nested loop joins. e.g., if we have `SELECT * FROM a, b WHERE a.x = b.y`,
-   * we will have `#0.x = #0.y` in the filter plan node. We will need to figure out where does `0.x` and `0.y` belong
-   * in NLJ (left table or right table?), and rewrite it as `#0.x = #1.y`.
+   * @brief join reording to pick the index and reorder base on cardinality
+   */
+  auto OptimizeJoinOrder(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef;
+
+  /**
+   * @brief rewrite expression to be used in nested loop joins. e.g., if we have `SELECT * FROM a, b WHERE a.x =
+   * b.y`, we will have `#0.x = #0.y` in the filter plan node. We will need to figure out where does `0.x` and `0.y`
+   * belong in NLJ (left table or right table?), and rewrite it as `#0.x = #1.y`.
    *
    * @param expr the filter expression
    * @param left_column_cnt number of columns in the left size of the NLJ

@@ -18,4 +18,14 @@ auto Optimizer::OptimizeCustom(const AbstractPlanNodeRef &plan) -> AbstractPlanN
   return p;
 }
 
+auto Optimizer::OptimizeJoinOrder(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef {
+  std::vector<AbstractPlanNodeRef> children;
+  for (const auto &child : plan->GetChildren()) {
+    children.emplace_back(OptimizeMergeProjection(child));
+  }
+  auto optimized_plan = plan->CloneWithChildren(std::move(children));
+
+  return optimized_plan;
+}
+
 }  // namespace bustub
