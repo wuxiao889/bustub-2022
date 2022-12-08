@@ -158,6 +158,10 @@ auto Optimizer::OptimizeFilter(const AbstractPlanNodeRef &plan) -> AbstractPlanN
 }
 
 auto Optimizer::OptimizeFilterExpr(const AbstractExpressionRef &pred) -> AbstractExpressionRef {
+  if (const auto *const_expr = dynamic_cast<ConstantValueExpression *>(pred.get()); const_expr != nullptr) {
+    return  pred;
+  }
+  
   if (const auto *cmp_expr = dynamic_cast<const ComparisonExpression *>(pred.get()); cmp_expr != nullptr) {
     if (const auto &left_value_expr = dynamic_cast<const ConstantValueExpression *>(cmp_expr->GetChildAt(0).get());
         left_value_expr != nullptr) {
@@ -208,9 +212,11 @@ auto Optimizer::OptimizeFilterExpr(const AbstractExpressionRef &pred) -> Abstrac
       const auto &is_true_logic = left_const_expr->val_.CastAs(TypeId::BOOLEAN).GetAs<bool>();
       switch (logic_type) {
         case LogicType::And:
-          return is_true_logic ? right_expr : std::make_shared<ConstantValueExpression>(ValueFactory::GetBooleanValue(false));
+          return is_true_logic ? right_expr
+                               : std::make_shared<ConstantValueExpression>(ValueFactory::GetBooleanValue(false));
         case LogicType::Or:
-          return is_true_logic ? std::make_shared<ConstantValueExpression>(ValueFactory::GetBooleanValue(true)) : right_expr;
+          return is_true_logic ? std::make_shared<ConstantValueExpression>(ValueFactory::GetBooleanValue(true))
+                               : right_expr;
       }
     }
 
@@ -219,9 +225,11 @@ auto Optimizer::OptimizeFilterExpr(const AbstractExpressionRef &pred) -> Abstrac
       const auto &is_true_logic = right_const_expr->val_.CastAs(TypeId::BOOLEAN).GetAs<bool>();
       switch (logic_type) {
         case LogicType::And:
-          return is_true_logic ? left_expr : std::make_shared<ConstantValueExpression>(ValueFactory::GetBooleanValue(false));
+          return is_true_logic ? left_expr
+                               : std::make_shared<ConstantValueExpression>(ValueFactory::GetBooleanValue(false));
         case LogicType::Or:
-          return is_true_logic ? std::make_shared<ConstantValueExpression>(ValueFactory::GetBooleanValue(true)) : left_expr;
+          return is_true_logic ? std::make_shared<ConstantValueExpression>(ValueFactory::GetBooleanValue(true))
+                               : left_expr;
       }
     }
   }
