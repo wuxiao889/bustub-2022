@@ -73,7 +73,7 @@ class Optimizer {
    */
   auto OptimizeJoinOrder(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef;
 
-  auto OptimizePredictPushDown(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef;
+  auto OptimizePredictPushDown(AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef;
 
   auto OptimizeDecomposeFilter(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef;
 
@@ -125,7 +125,12 @@ class Optimizer {
    */
   auto EstimatedCardinality(const std::string &table_name) -> std::optional<size_t>;
 
-  auto GetSize(const AbstractPlanNodeRef &plan) -> std::optional<size_t>;
+  auto EstimatePlan(const AbstractPlanNodeRef &plan) -> std::optional<size_t>;
+
+  /**
+   * @brief only use logic::and
+   */
+  auto BuildExprTree(const std::vector<AbstractExpressionRef> &exprs) -> AbstractExpressionRef;
 
   /** Catalog will be used during the planning process. USERS SHOULD ENSURE IT OUTLIVES
    * OPTIMIZER, otherwise it's a dangling reference.

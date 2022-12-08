@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "execution/executors/hash_join_executor.h"
+#include <cassert>
 #include <vector>
 #include "binder/table_ref/bound_join_ref.h"
 #include "common/rid.h"
@@ -124,6 +125,7 @@ auto HashJoinExecutor::GenerateValue(const Tuple *left_tuple, const Schema &left
   values.reserve(GetOutputSchema().GetColumnCount());
 
   if (reorded_) {
+    assert(right_tuple);
     for (uint32_t i = 0; i < right_schema.GetColumnCount(); i++) {
       values.push_back(right_tuple->GetValue(&right_schema, i));
     }

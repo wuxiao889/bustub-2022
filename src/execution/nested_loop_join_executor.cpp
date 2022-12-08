@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "execution/executors/nested_loop_join_executor.h"
+#include <cassert>
 #include <cstdint>
 #include <vector>
 #include "binder/table_ref/bound_join_ref.h"
@@ -121,6 +122,7 @@ auto NestedLoopJoinExecutor::GenerateValue(const Tuple *left_tuple, const Schema
   values.reserve(GetOutputSchema().GetColumnCount());
 
   if (reorded_) {
+    assert(right_tuple);
     for (uint32_t i = 0; i < right_schema.GetColumnCount(); i++) {
       values.push_back(right_tuple->GetValue(&right_schema, i));
     }

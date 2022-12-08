@@ -1,9 +1,11 @@
-#include <math.h>
 #include <algorithm>
 #include <cassert>
 #include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <optional>
+#include <vector>
+#include "binder/bound_expression.h"
 #include "binder/table_ref/bound_join_ref.h"
 #include "catalog/column.h"
 #include "catalog/schema.h"
@@ -40,18 +42,18 @@ auto Optimizer::OptimizeCustom(const AbstractPlanNodeRef &plan) -> AbstractPlanN
   p = OptimizeFilter(p);
   p = OptimizeEliminateTrueFalseFilter(p);
   // fmt::print("OptimizeFilter(p)\n{}\n\n", *p);
+  p = OptimizeMergeFilterNLJ(p);  // 不能先调整order在merger filter nlj， filter pred顺序会不对
+  fmt::print("OptimizeMergeFilterNLJ(p)\n{}\n\n", *p);
   p = OptimizeJoinOrder(p);
-  // fmt::print("OptimizeJoinOrder(p)\n{}\n\n", *p);
-  p = OptimizeMergeFilterNLJ(p);
-  // fmt::print("OptimizeMergeFilterNLJ(p)\n{}\n\n", *p);
+  fmt::print("OptimizeJoinOrder(p)\n{}\n\n", *p);
+  p = OptimizePredictPushDown(p);
+  // fmt::print("OptimizePredictPushDown(p)\n{}\n\n", *p);
   p = OptimizeMergeFilterScan(p);
-
+  // fmt::print("OptimizeMergeFilterScan(p)\n{}\n\n", *p);
   p = OptimizeNLJAsIndexJoin(p);
   p = OptimizeNLJAsHashJoin(p);
 
-  p = OptimizeMergeFilterScan(p);
   p = OptimizeOrderByAsIndexScan(p);
-
   p = OptimizeSortLimitAsTopN(p);
   return p;
 }
@@ -61,14 +63,16 @@ auto Optimizer::ReversePredict(const AbstractExpressionRef &pred) -> AbstractExp
   if (const auto *const_value_expr = dynamic_cast<const ConstantValueExpression *>(pred.get())) {
     return pred;
   }
-  const auto *expr = dynamic_cast<const ComparisonExpression *>(pred.get());
-  assert(expr);
-  for (const auto &child : pred->GetChildren()) {
-    const auto *column_value_expr = dynamic_cast<const ColumnValueExpression *>(child.get());
-    children.emplace_back(std::make_shared<ColumnValueExpression>(
-        column_value_expr->GetTupleIdx() ^ 1, column_value_expr->GetColIdx(), column_value_expr->GetReturnType()));
+  if (const auto *expr = dynamic_cast<const ComparisonExpression *>(pred.get()); expr != nullptr) {
+    assert(expr);
+    for (const auto &child : pred->GetChildren()) {
+      const auto *column_value_expr = dynamic_cast<const ColumnValueExpression *>(child.get());
+      children.emplace_back(std::make_shared<ColumnValueExpression>(
+          column_value_expr->GetTupleIdx() ^ 1, column_value_expr->GetColIdx(), column_value_expr->GetReturnType()));
+    }
+    return expr->CloneWithChildren(children);
   }
-  return expr->CloneWithChildren(children);
+  return pred;
 }
 
 auto Optimizer::OptimizeJoinOrder(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef {
@@ -82,7 +86,15 @@ auto Optimizer::OptimizeJoinOrder(const AbstractPlanNodeRef &plan) -> AbstractPl
     const auto &nlj_plan = dynamic_cast<const NestedLoopJoinPlanNode &>(*optimized_plan);
     // Has exactly two children
     BUSTUB_ENSURE(nlj_plan.children_.size() == 2, "nls_plan should have 2 chlid");
-
+    // if (nlj_plan.join_type_ == JoinType::INNER) {
+    //   const auto left_size = EstimatePlan(plan->GetChildAt(0));
+    //   const auto right_size = EstimatePlan(plan->GetChildAt(1));
+    //   if (left_size && right_size && left_size > right_size) {
+    //     return std::make_shared<NestedLoopJoinPlanNode>(nlj_plan.output_schema_, nlj_plan.GetRightPlan(),
+    //                                                     nlj_plan.GetLeftPlan(), ReversePredict(nlj_plan.predicate_),
+    //                                                     nlj_plan.join_type_);
+    //   }
+    // }
     if (const auto *cmp_expr = dynamic_cast<const ComparisonExpression *>(&nlj_plan.Predicate()); cmp_expr != nullptr) {
       if (cmp_expr->comp_type_ == ComparisonType::Equal && nlj_plan.join_type_ == JoinType::INNER) {
         const auto left_size = EstimatePlan(plan->GetChildAt(0));
@@ -111,72 +123,134 @@ auto Optimizer::OptimizeJoinOrder(const AbstractPlanNodeRef &plan) -> AbstractPl
   return optimized_plan;
 }
 
-auto Optimizer::OptimizePredictPushDown(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef {
+auto Optimizer::OptimizePredictPushDown(AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef {
+  std::vector<AbstractExpressionRef> left_cmp_exprs;
+  std::vector<AbstractExpressionRef> right_cmp_exprs;
+  std::vector<AbstractExpressionRef> col_equal_exprs;
+
+  std::function<void(const AbstractExpressionRef &)> find_expr = [&](const AbstractExpressionRef &pred) {
+    if (const auto *logic_expr = dynamic_cast<const LogicExpression *>(pred.get()); logic_expr != nullptr) {
+      find_expr(pred->GetChildAt(0));
+      find_expr(pred->GetChildAt(1));
+    }
+
+    if (const auto *cmp_expr = dynamic_cast<const ComparisonExpression *>(pred.get()); cmp_expr != nullptr) {
+      if (const auto *left_expr = dynamic_cast<const ColumnValueExpression *>(cmp_expr->GetChildAt(0).get());
+          left_expr != nullptr) {
+        if (const auto *right_expr = dynamic_cast<const ColumnValueExpression *>(cmp_expr->GetChildAt(1).get());
+            right_expr != nullptr) {
+          col_equal_exprs.push_back(std::make_shared<ComparisonExpression>(
+              cmp_expr->GetChildAt(0), cmp_expr->GetChildAt(1), cmp_expr->comp_type_));
+          return;
+        }
+      }
+
+      if (const auto *left_expr = dynamic_cast<const ColumnValueExpression *>(cmp_expr->GetChildAt(0).get());
+          left_expr != nullptr) {
+        auto tuple_index = left_expr->GetTupleIdx();
+        if (tuple_index == 0) {
+          left_cmp_exprs.push_back(std::make_shared<ComparisonExpression>(
+              cmp_expr->GetChildAt(0), cmp_expr->GetChildAt(1), cmp_expr->comp_type_));
+        } else {
+          auto expr_tuple_0 =
+              std::make_shared<ColumnValueExpression>(0, left_expr->GetColIdx(), left_expr->GetReturnType());
+          right_cmp_exprs.push_back(
+              std::make_shared<ComparisonExpression>(expr_tuple_0, cmp_expr->GetChildAt(1), cmp_expr->comp_type_));
+          return;
+        }
+      }
+
+      if (const auto *right_expr = dynamic_cast<const ColumnValueExpression *>(cmp_expr->GetChildAt(1).get());
+          right_expr != nullptr) {
+        auto tuple_index = right_expr->GetTupleIdx();
+        if (tuple_index == 0) {
+          left_cmp_exprs.push_back(std::make_shared<ComparisonExpression>(
+              cmp_expr->GetChildAt(0), cmp_expr->GetChildAt(1), cmp_expr->comp_type_));
+        } else {
+          auto expr_tuple_0 =
+              std::make_shared<ColumnValueExpression>(0, right_expr->GetColIdx(), right_expr->GetReturnType());
+          right_cmp_exprs.push_back(
+              std::make_shared<ComparisonExpression>(expr_tuple_0, cmp_expr->GetChildAt(1), cmp_expr->comp_type_));
+        }
+      }
+    }  // cmp_expr
+  };
+
+  if (plan->GetType() == PlanType::NestedLoopJoin) {
+    const auto &nlj_plan = dynamic_cast<const NestedLoopJoinPlanNode &>(*plan);
+    // Has exactly two children
+    BUSTUB_ENSURE(nlj_plan.children_.size() == 2, "NLJ should have exactly 2 children.");
+    // 复杂逻辑表达式才要下推
+    if (const auto *logic_expr = dynamic_cast<const LogicExpression *>(nlj_plan.predicate_.get());
+        logic_expr != nullptr) {
+      find_expr(nlj_plan.predicate_);
+      // auto show_expr = [](const auto &exprs) {
+      //   for (auto &expr : exprs) {
+      //     fmt::print("{}\n", *expr);
+      //   }
+      // };
+
+      // show_expr(col_equal_exprs);
+      // show_expr(left_cmp_exprs);
+      // show_expr(right_cmp_exprs);
+
+      if (!left_cmp_exprs.empty() || !right_cmp_exprs.empty()) {
+        // nlj , mock_seq, seq,
+        const auto join_type = nlj_plan.join_type_;
+        auto left_plan = plan->GetChildAt(0);
+        auto right_plan = plan->GetChildAt(1);
+        AbstractPlanNodeRef new_left_plan = left_plan;
+        AbstractPlanNodeRef new_right_plan = right_plan;
+
+        const auto left_plan_type = left_plan->GetType();
+        const auto right_plan_type = right_plan->GetType();
+
+        auto new_nlj_expr = BuildExprTree(col_equal_exprs);
+
+        if (!left_cmp_exprs.empty()) {
+          AbstractExpressionRef new_expr = BuildExprTree(left_cmp_exprs);
+          if (left_plan_type == PlanType::SeqScan || left_plan_type == PlanType::MockScan) {
+            // 在中间插入filter, 后续optimize会下推
+            new_left_plan = std::make_shared<FilterPlanNode>(left_plan->output_schema_, new_expr, left_plan);
+          } else if (left_plan_type == PlanType::NestedLoopJoin) {
+            const auto *left_nlj_plan = dynamic_cast<const NestedLoopJoinPlanNode *>(left_plan.get());
+            // 构造新表达式
+            auto new_left_nlj_expr =
+                std::make_shared<LogicExpression>(new_expr, left_nlj_plan->predicate_, LogicType::And);
+
+            new_left_plan = std::make_shared<NestedLoopJoinPlanNode>(
+                left_nlj_plan->output_schema_, left_nlj_plan->GetLeftPlan(), left_nlj_plan->GetRightPlan(),
+                new_left_nlj_expr, left_nlj_plan->join_type_);
+          }
+        }
+
+        if (!right_cmp_exprs.empty()) {
+          AbstractExpressionRef new_expr = BuildExprTree(right_cmp_exprs);
+          if (right_plan_type == PlanType::SeqScan || right_plan_type == PlanType::MockScan) {
+            new_right_plan = std::make_shared<FilterPlanNode>(right_plan->output_schema_, new_expr, right_plan);
+
+          } else if (right_plan_type == PlanType::NestedLoopJoin) {
+            const auto *right_nlj_plan = dynamic_cast<const NestedLoopJoinPlanNode *>(right_plan.get());
+            auto new_right_nlj_expr =
+                std::make_shared<LogicExpression>(new_expr, right_nlj_plan->predicate_, LogicType::And);
+
+            new_right_plan = std::make_shared<NestedLoopJoinPlanNode>(
+                right_nlj_plan->output_schema_, right_nlj_plan->GetLeftPlan(), right_nlj_plan->GetRightPlan(),
+                new_right_nlj_expr, right_nlj_plan->join_type_);
+          }
+        }
+
+        plan = std::make_shared<NestedLoopJoinPlanNode>(plan->output_schema_, new_left_plan, new_right_plan,
+                                                        new_nlj_expr, join_type);
+      }
+    }
+  }
+
   std::vector<AbstractPlanNodeRef> children;
-  for (const auto &child : plan->GetChildren()) {
+  for (auto child : plan->GetChildren()) {
     children.emplace_back(OptimizePredictPushDown(child));
   }
   auto optimized_plan = plan->CloneWithChildren(std::move(children));
-
-  std::vector<const ComparisonExpression *> cmp_exprs;
-
-  std::function<void(const AbstractExpression *)> find_expr = [&](const AbstractExpression *pred) {
-    if (const auto *expr = dynamic_cast<const ComparisonExpression *>(pred); expr != nullptr) {
-      if (const auto *left_expr = dynamic_cast<const ColumnValueExpression *>(expr->GetChildAt(0).get());
-          left_expr != nullptr) {
-        if (const auto *right_expr = dynamic_cast<const ConstantValueExpression *>(expr->GetChildAt(1).get());
-            right_expr != nullptr) {
-          cmp_exprs.push_back(expr);
-        }
-      } else if (const auto *left_expr = dynamic_cast<const ConstantValueExpression *>(expr->GetChildAt(0).get());
-                 left_expr != nullptr) {
-        if (const auto *right_expr = dynamic_cast<const ColumnValueExpression *>(expr->GetChildAt(1).get());
-            right_expr != nullptr) {
-          cmp_exprs.push_back(expr);
-        }
-      }
-    }
-
-    if (const auto *expr = dynamic_cast<const LogicExpression *>(pred); expr != nullptr) {
-      // fmt::print("{} {}\n", *expr, expr->logic_type_);
-      for (const auto &cexpr : expr->GetChildren()) {
-        find_expr(cexpr.get());
-      }
-    }
-  };
-
-  if (optimized_plan->GetType() == PlanType::NestedLoopJoin) {
-    const auto &nlj_plan = dynamic_cast<const NestedLoopJoinPlanNode &>(*optimized_plan);
-    // Has exactly two children
-    BUSTUB_ENSURE(nlj_plan.children_.size() == 2, "NLJ should have exactly 2 children.");
-    // Check if expr is equal condition where one is for the left table, and one is for the right table.
-    // if (const auto *expr = dynamic_cast<const LogicExpression *>(&nlj_plan.Predicate()); expr != nullptr) {
-    //   fmt::print("{} {}\n", *expr, expr->GetChildren().size());
-    // }
-    // if(const auto* const_expr = dynamic_cast<const ConstantValueExpression*>(nlj_plan.predicate_.get()); const_expr
-    // != nullptr){
-
-    // }
-
-    if (const auto *cmp_expr = dynamic_cast<const ComparisonExpression *>(nlj_plan.predicate_.get());
-        cmp_expr != nullptr) {
-    }
-
-    if (find_expr(nlj_plan.predicate_.get()); cmp_exprs.size() > 1) {
-      // 找到第一个equal
-      // auto it = std::find(cmp_exprs.begin(), cmp_exprs.end(),
-      //                     [](const ComparisonExpression *expr) { return expr->comp_type_ == ComparisonType::Equal;
-      //                     });
-
-      // if (it != cmp_exprs.end()) {
-      //   const auto *equal_expr = *it;
-      //   cmp_exprs.erase(it);
-      //   auto filter = std::make_shared<FilterPlanNode>(
-      //       nlj_plan.output_schema_, std::make_shared<AbstractExpression>(equal_expr), std::move(optimized_plan));
-      //   return filter;
-      // }
-    }
-  }
   return optimized_plan;
 }
 
@@ -217,14 +291,14 @@ auto Optimizer::OptimizeFilter(const AbstractPlanNodeRef &plan) -> AbstractPlanN
   return optimized_plan;
 }
 
+/*
+FilterExpr有三种情况 ConstValue Cmp Logic
+ConstValue {true, false}
+cmp {1 = 2, #1.0 = #0.0}
+  等号两边有三种情况constvalue, arithmetic, colvalue
+logic {cmp and cmp and cmp or cmp}
+*/
 auto Optimizer::OptimizeFilterExpr(const AbstractExpressionRef &pred) -> AbstractExpressionRef {
-  /*
-  FilterExpr有三种情况 ConstValue Cmp Logic
-  ConstValue {true, false}
-  cmp {1 = 2, #1.0 = #0.0}
-    等号两边有三种情况constvalue, arithmetic, colvalue
-  logic {cmp and cmp and cmp or cmp}
-  */
   if (const auto *const_expr = dynamic_cast<ConstantValueExpression *>(pred.get()); const_expr != nullptr) {
     return pred;
   }
@@ -333,7 +407,21 @@ auto Optimizer::EstimatePlan(const AbstractPlanNodeRef &plan) -> std::optional<s
     const auto &mock_scan = dynamic_cast<const MockScanPlanNode &>(*plan);
     return EstimatedCardinality(mock_scan.GetTable());
   }
+
   return std::nullopt;
+}
+
+auto Optimizer::BuildExprTree(const std::vector<AbstractExpressionRef> &exprs) -> AbstractExpressionRef {
+  if (exprs.size() == 1) {
+    // fmt::print("{}\n", exprs[0]);
+    return exprs[0];
+  }
+  auto logic_root = std::make_shared<LogicExpression>(exprs[0], exprs[1], LogicType::And);
+  for (uint64_t i = 2; i < exprs.size(); i++) {
+    logic_root = std::make_shared<LogicExpression>(logic_root, exprs[i], LogicType::And);
+  }
+  // fmt::print("{}\n", logic_root);
+  return logic_root;
 }
 
 }  // namespace bustub
