@@ -43,10 +43,10 @@ auto Optimizer::OptimizeCustom(const AbstractPlanNodeRef &plan) -> AbstractPlanN
   p = OptimizeEliminateTrueFalseFilter(p);
   // fmt::print("OptimizeFilter(p)\n{}\n\n", *p);
   p = OptimizeMergeFilterNLJ(p);  // 不能先调整order在merger filter nlj， filter pred顺序会不对
-  fmt::print("OptimizeMergeFilterNLJ(p)\n{}\n\n", *p);
+  // fmt::print("OptimizeMergeFilterNLJ(p)\n{}\n\n", *p);
   p = OptimizeJoinOrder(p);
-  fmt::print("OptimizeJoinOrder(p)\n{}\n\n", *p);
-  p = OptimizePredictPushDown(p);
+  // fmt::print("OptimizeJoinOrder(p)\n{}\n\n", *p);
+  p = OptimizeNLJPredicate(p);
   // fmt::print("OptimizePredictPushDown(p)\n{}\n\n", *p);
   p = OptimizeMergeFilterScan(p);
   // fmt::print("OptimizeMergeFilterScan(p)\n{}\n\n", *p);
@@ -58,21 +58,18 @@ auto Optimizer::OptimizeCustom(const AbstractPlanNodeRef &plan) -> AbstractPlanN
   return p;
 }
 
-auto Optimizer::ReversePredict(const AbstractExpressionRef &pred) -> AbstractExpressionRef {
+auto Optimizer::RewriteTupleIndex(const AbstractExpressionRef &pred) -> AbstractExpressionRef {
   std::vector<AbstractExpressionRef> children;
-  if (const auto *const_value_expr = dynamic_cast<const ConstantValueExpression *>(pred.get())) {
-    return pred;
+  for (const auto &child : pred->GetChildren()) {
+    children.emplace_back(RewriteTupleIndex(child));
   }
-  if (const auto *expr = dynamic_cast<const ComparisonExpression *>(pred.get()); expr != nullptr) {
-    assert(expr);
-    for (const auto &child : pred->GetChildren()) {
-      const auto *column_value_expr = dynamic_cast<const ColumnValueExpression *>(child.get());
-      children.emplace_back(std::make_shared<ColumnValueExpression>(
-          column_value_expr->GetTupleIdx() ^ 1, column_value_expr->GetColIdx(), column_value_expr->GetReturnType()));
-    }
-    return expr->CloneWithChildren(children);
+  auto new_pred = pred->CloneWithChildren(children);
+  if (const auto *column_value_expr = dynamic_cast<const ColumnValueExpression *>(pred.get());
+      column_value_expr != nullptr) {
+    return std::make_shared<ColumnValueExpression>(column_value_expr->GetTupleIdx() ^ 1, column_value_expr->GetColIdx(),
+                                                   column_value_expr->GetReturnType());
   }
-  return pred;
+  return new_pred;
 }
 
 auto Optimizer::OptimizeJoinOrder(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef {
@@ -86,44 +83,20 @@ auto Optimizer::OptimizeJoinOrder(const AbstractPlanNodeRef &plan) -> AbstractPl
     const auto &nlj_plan = dynamic_cast<const NestedLoopJoinPlanNode &>(*optimized_plan);
     // Has exactly two children
     BUSTUB_ENSURE(nlj_plan.children_.size() == 2, "nls_plan should have 2 chlid");
-    // if (nlj_plan.join_type_ == JoinType::INNER) {
-    //   const auto left_size = EstimatePlan(plan->GetChildAt(0));
-    //   const auto right_size = EstimatePlan(plan->GetChildAt(1));
-    //   if (left_size && right_size && left_size > right_size) {
-    //     return std::make_shared<NestedLoopJoinPlanNode>(nlj_plan.output_schema_, nlj_plan.GetRightPlan(),
-    //                                                     nlj_plan.GetLeftPlan(), ReversePredict(nlj_plan.predicate_),
-    //                                                     nlj_plan.join_type_);
-    //   }
-    // }
-    if (const auto *cmp_expr = dynamic_cast<const ComparisonExpression *>(&nlj_plan.Predicate()); cmp_expr != nullptr) {
-      if (cmp_expr->comp_type_ == ComparisonType::Equal && nlj_plan.join_type_ == JoinType::INNER) {
-        const auto left_size = EstimatePlan(plan->GetChildAt(0));
-        const auto right_size = EstimatePlan(plan->GetChildAt(1));
-        if (left_size && right_size && left_size > right_size) {
-          return std::make_shared<NestedLoopJoinPlanNode>(nlj_plan.output_schema_, nlj_plan.GetRightPlan(),
-                                                          nlj_plan.GetLeftPlan(), ReversePredict(nlj_plan.predicate_),
-                                                          nlj_plan.join_type_);
-        }
-      }
-    }
-
-    if (const auto *const_expr = dynamic_cast<const ConstantValueExpression *>(&nlj_plan.Predicate());
-        const_expr != nullptr) {
-      if (const_expr->val_.CastAs(TypeId::BOOLEAN).GetAs<bool>()) {
-        const auto left_size = EstimatePlan(plan->GetChildAt(0));
-        const auto right_size = EstimatePlan(plan->GetChildAt(1));
-        if (left_size && right_size && left_size > right_size) {
-          return std::make_shared<NestedLoopJoinPlanNode>(nlj_plan.output_schema_, nlj_plan.GetRightPlan(),
-                                                          nlj_plan.GetLeftPlan(), ReversePredict(nlj_plan.predicate_),
-                                                          nlj_plan.join_type_);
-        }
+    if (nlj_plan.join_type_ == JoinType::INNER) {
+      const auto left_size = EstimatePlan(plan->GetChildAt(0));
+      const auto right_size = EstimatePlan(plan->GetChildAt(1));
+      if (left_size && right_size && left_size > right_size) {
+        return std::make_shared<NestedLoopJoinPlanNode>(nlj_plan.output_schema_, nlj_plan.GetRightPlan(),
+                                                        nlj_plan.GetLeftPlan(), RewriteTupleIndex(nlj_plan.predicate_),
+                                                        nlj_plan.join_type_);
       }
     }
   }
   return optimized_plan;
 }
 
-auto Optimizer::OptimizePredictPushDown(AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef {
+auto Optimizer::OptimizeNLJPredicate(AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef {
   std::vector<AbstractExpressionRef> left_cmp_exprs;
   std::vector<AbstractExpressionRef> right_cmp_exprs;
   std::vector<AbstractExpressionRef> col_equal_exprs;
@@ -248,7 +221,7 @@ auto Optimizer::OptimizePredictPushDown(AbstractPlanNodeRef &plan) -> AbstractPl
 
   std::vector<AbstractPlanNodeRef> children;
   for (auto child : plan->GetChildren()) {
-    children.emplace_back(OptimizePredictPushDown(child));
+    children.emplace_back(OptimizeNLJPredicate(child));
   }
   auto optimized_plan = plan->CloneWithChildren(std::move(children));
   return optimized_plan;

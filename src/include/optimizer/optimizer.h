@@ -62,7 +62,11 @@ class Optimizer {
    */
   auto OptimizeEliminateTrueFilter(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef;
 
+  /**
+   * @brief eliminate always true or false filter
+   */
   auto OptimizeEliminateTrueFalseFilter(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef;
+
   /**
    * @brief merge filter into filter_predicate of seq scan plan node
    */
@@ -73,19 +77,19 @@ class Optimizer {
    */
   auto OptimizeJoinOrder(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef;
 
-  auto OptimizePredictPushDown(AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef;
+  auto OptimizeNLJPredicate(AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef;
 
-  auto OptimizeDecomposeFilter(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef;
-
+  /**
+   * @brief optimize filter plan predicate
+   */
   auto OptimizeFilter(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef;
-  //   auto CheckComparisonExpression(const AbstractExpression *pred) -> bool;
 
   /**
    * @brief 优化逻辑表达式中的常量
    */
   auto OptimizeFilterExpr(const AbstractExpressionRef &pred) -> AbstractExpressionRef;
 
-  auto ReversePredict(const AbstractExpressionRef &pred) -> AbstractExpressionRef;
+  auto RewriteTupleIndex(const AbstractExpressionRef &pred) -> AbstractExpressionRef;
 
   /**
    * @brief rewrite expression to be used in nested loop joins. e.g., if we have `SELECT * FROM a, b WHERE a.x =
@@ -125,10 +129,13 @@ class Optimizer {
    */
   auto EstimatedCardinality(const std::string &table_name) -> std::optional<size_t>;
 
+  /**
+   * @brief estimate plan cardinality
+   */
   auto EstimatePlan(const AbstractPlanNodeRef &plan) -> std::optional<size_t>;
 
   /**
-   * @brief only use logic::and
+   * @brief only use logic::and to build new log expr
    */
   auto BuildExprTree(const std::vector<AbstractExpressionRef> &exprs) -> AbstractExpressionRef;
 
