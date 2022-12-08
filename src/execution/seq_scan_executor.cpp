@@ -24,10 +24,16 @@ void SeqScanExecutor::Init() { cur_ = table_info_->table_->Begin(exec_ctx_->GetT
 
 auto SeqScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
   auto end = table_info_->table_->End();
-  if (cur_ != end) {
+  while (cur_ != end) {
     *tuple = *cur_;
     *rid = cur_->GetRid();
     cur_++;
+    if (plan_->filter_predicate_ != nullptr) {
+      const auto value = plan_->filter_predicate_->Evaluate(tuple, plan_->OutputSchema());
+      if (value.IsNull() || !value.GetAs<bool>()) {
+        continue;
+      }
+    }
     // fmt::print("SeqScanExecutor::Next {}\n", tuple->ToString(&plan_->OutputSchema()));
     return true;
   }

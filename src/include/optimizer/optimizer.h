@@ -10,6 +10,7 @@
 #include "catalog/catalog.h"
 #include "concurrency/transaction.h"
 #include "execution/expressions/abstract_expression.h"
+#include "execution/expressions/comparison_expression.h"
 #include "execution/plans/abstract_plan.h"
 
 #define BUSTUB_OPTIMIZER_HACK_REMOVE_AFTER_2022_FALL
@@ -60,6 +61,7 @@ class Optimizer {
    */
   auto OptimizeEliminateTrueFilter(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef;
 
+  auto OptimizeEliminateTrueFalseFilter(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef;
   /**
    * @brief merge filter into filter_predicate of seq scan plan node
    */
@@ -70,6 +72,13 @@ class Optimizer {
    */
   auto OptimizeJoinOrder(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef;
 
+  auto OptimizeFilterPushDown(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef;
+
+  auto OptimizeDecomposeFilter(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef;
+
+  auto OptimizeFilter(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef;
+  //   auto CheckComparisonExpression(const AbstractExpression *pred) -> bool;
+  auto OptimizeFilterExpr(const AbstractExpressionRef &pred) -> AbstractExpressionRef;
   /**
    * @brief rewrite expression to be used in nested loop joins. e.g., if we have `SELECT * FROM a, b WHERE a.x =
    * b.y`, we will have `#0.x = #0.y` in the filter plan node. We will need to figure out where does `0.x` and `0.y`

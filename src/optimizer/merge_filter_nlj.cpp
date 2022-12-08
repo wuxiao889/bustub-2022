@@ -59,7 +59,7 @@ auto Optimizer::OptimizeMergeFilterNLJ(const AbstractPlanNodeRef &plan) -> Abstr
       const auto &nlj_plan = dynamic_cast<const NestedLoopJoinPlanNode &>(*child_plan);
       // Has exactly two children
       BUSTUB_ENSURE(child_plan->GetChildren().size() == 2, "NLJ should have exactly 2 children.");
-
+      // NestedLoopJoin { type=Inner, predicate=true } select * from tableA , tableB;
       if (IsPredicateTrue(nlj_plan.Predicate())) {
         // Only rewrite when NLJ has always true predicate.
         return std::make_shared<NestedLoopJoinPlanNode>(
