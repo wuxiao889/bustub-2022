@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <memory>
 #include <string>
 #include <tuple>
@@ -72,13 +73,20 @@ class Optimizer {
    */
   auto OptimizeJoinOrder(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef;
 
-  auto OptimizeFilterPushDown(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef;
+  auto OptimizePredictPushDown(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef;
 
   auto OptimizeDecomposeFilter(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef;
 
   auto OptimizeFilter(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef;
   //   auto CheckComparisonExpression(const AbstractExpression *pred) -> bool;
+
+  /**
+   * @brief 优化逻辑表达式中的常量
+   */
   auto OptimizeFilterExpr(const AbstractExpressionRef &pred) -> AbstractExpressionRef;
+
+  auto ReversePredict(const AbstractExpressionRef &pred) -> AbstractExpressionRef;
+
   /**
    * @brief rewrite expression to be used in nested loop joins. e.g., if we have `SELECT * FROM a, b WHERE a.x =
    * b.y`, we will have `#0.x = #0.y` in the filter plan node. We will need to figure out where does `0.x` and `0.y`
@@ -116,6 +124,8 @@ class Optimizer {
    * @return std::optional<size_t>
    */
   auto EstimatedCardinality(const std::string &table_name) -> std::optional<size_t>;
+
+  auto GetSize(const AbstractPlanNodeRef &plan) -> std::optional<size_t>;
 
   /** Catalog will be used during the planning process. USERS SHOULD ENSURE IT OUTLIVES
    * OPTIMIZER, otherwise it's a dangling reference.

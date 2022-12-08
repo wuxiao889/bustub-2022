@@ -69,6 +69,7 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
 
   Tuple left_tuple_{};
   bool joined_;
+  bool reorded_;
 
   bool is_both_seq_;
   size_t left_pool_size_;

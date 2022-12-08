@@ -15,6 +15,8 @@
 #include "binder/table_ref/bound_join_ref.h"
 #include "common/rid.h"
 #include "execution/plans/hash_join_plan.h"
+#include "execution/plans/nested_loop_join_plan.h"
+#include "optimizer/optimizer.h"
 #include "type/value_factory.h"
 // Note for 2022 Fall: You don't need to implement HashJoinExecutor to pass all tests. You ONLY need to implement it
 // if you want to get faster in leaderboard tests.
@@ -30,6 +32,7 @@ HashJoinExecutor::HashJoinExecutor(ExecutorContext *exec_ctx, const HashJoinPlan
       right_child_executor_(std::move(right_child)),
       build_(false),
       right_finished_(false),
+      reorded_(false),
       cur_index_(0),
       cur_vec_(nullptr) {
   if (plan->GetJoinType() != JoinType::LEFT && plan->GetJoinType() != JoinType::INNER) {
@@ -47,6 +50,11 @@ void HashJoinExecutor::Init() {
 
   build_ = true;
   left_child_executor_->Init();
+
+  if (plan_->GetJoinType() == JoinType::INNER) {
+    reorded_ =
+        plan_->GetLeftPlan()->output_schema_->GetColumn(0).GetName() != plan_->output_schema_->GetColumn(0).GetName();
+  }
 
   Tuple tuple;
   RID rid;
@@ -115,21 +123,28 @@ auto HashJoinExecutor::GenerateValue(const Tuple *left_tuple, const Schema &left
   std::vector<Value> values;
   values.reserve(GetOutputSchema().GetColumnCount());
 
-  for (uint32_t i = 0; i < left_schema.GetColumnCount(); i++) {  // left_tuple.GetLegth() xxxxxx
-    values.push_back(left_tuple->GetValue(&left_schema, i));
-  }
-
-  if (right_tuple != nullptr) {
+  if (reorded_) {
     for (uint32_t i = 0; i < right_schema.GetColumnCount(); i++) {
       values.push_back(right_tuple->GetValue(&right_schema, i));
     }
+    for (uint32_t i = 0; i < left_schema.GetColumnCount(); i++) {  // left_tuple.GetLegth() xxxxxx
+      values.push_back(left_tuple->GetValue(&left_schema, i));
+    }
   } else {
-    for (uint32_t i = 0; i < right_schema.GetColumnCount(); i++) {
-      auto type_id = right_schema.GetColumn(i).GetType();
-      values.push_back(ValueFactory::GetNullValueByType(type_id));
+    for (uint32_t i = 0; i < left_schema.GetColumnCount(); i++) {  // left_tuple.GetLegth() xxxxxx
+      values.push_back(left_tuple->GetValue(&left_schema, i));
+    }
+    if (right_tuple != nullptr) {
+      for (uint32_t i = 0; i < right_schema.GetColumnCount(); i++) {
+        values.push_back(right_tuple->GetValue(&right_schema, i));
+      }
+    } else {
+      for (uint32_t i = 0; i < right_schema.GetColumnCount(); i++) {
+        auto type_id = right_schema.GetColumn(i).GetType();
+        values.push_back(ValueFactory::GetNullValueByType(type_id));
+      }
     }
   }
-
   return values;
 }
 

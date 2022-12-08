@@ -17,7 +17,9 @@
 #include "common/config.h"
 #include "common/exception.h"
 #include "execution/plans/abstract_plan.h"
+#include "execution/plans/nested_loop_join_plan.h"
 #include "execution/plans/seq_scan_plan.h"
+#include "optimizer/optimizer.h"
 #include "storage/table/tuple.h"
 #include "type/value_factory.h"
 
@@ -31,6 +33,7 @@ NestedLoopJoinExecutor::NestedLoopJoinExecutor(ExecutorContext *exec_ctx, const 
       left_child_executor_(std::move(left_executor)),
       right_child_executor_(std::move(right_executor)),
       joined_(false),
+      reorded_(false),
       is_both_seq_(false) {
   if (plan->GetJoinType() != JoinType::LEFT && plan->GetJoinType() != JoinType::INNER) {
     // Note for 2022 Fall: You ONLY need to implement left join and inner join.
@@ -42,6 +45,10 @@ void NestedLoopJoinExecutor::Init() {
   left_child_executor_->Init();
   right_child_executor_->Init();
 
+  if (plan_->join_type_ == JoinType::INNER) {
+    reorded_ =
+        plan_->output_schema_->GetColumn(0).GetName() != plan_->GetLeftPlan()->output_schema_->GetColumn(0).GetName();
+  }
   // TODO(wxx) implement BLOCK NESTED LOOP JOIN
   // auto left_ctx = left_child_executor_->GetExecutorContext();
   // auto right_ctx = right_child_executor_->GetExecutorContext();
@@ -113,21 +120,28 @@ auto NestedLoopJoinExecutor::GenerateValue(const Tuple *left_tuple, const Schema
   std::vector<Value> values;
   values.reserve(GetOutputSchema().GetColumnCount());
 
-  for (uint32_t i = 0; i < left_schema.GetColumnCount(); i++) {  // left_tuple.GetLegth() xxxxxx
-    values.push_back(left_tuple->GetValue(&left_schema, i));
-  }
-
-  if (right_tuple != nullptr) {
+  if (reorded_) {
     for (uint32_t i = 0; i < right_schema.GetColumnCount(); i++) {
       values.push_back(right_tuple->GetValue(&right_schema, i));
     }
+    for (uint32_t i = 0; i < left_schema.GetColumnCount(); i++) {  // left_tuple.GetLegth() xxxxxx
+      values.push_back(left_tuple->GetValue(&left_schema, i));
+    }
   } else {
-    for (uint32_t i = 0; i < right_schema.GetColumnCount(); i++) {
-      auto type_id = right_schema.GetColumn(i).GetType();
-      values.push_back(ValueFactory::GetNullValueByType(type_id));
+    for (uint32_t i = 0; i < left_schema.GetColumnCount(); i++) {  // left_tuple.GetLegth() xxxxxx
+      values.push_back(left_tuple->GetValue(&left_schema, i));
+    }
+    if (right_tuple != nullptr) {
+      for (uint32_t i = 0; i < right_schema.GetColumnCount(); i++) {
+        values.push_back(right_tuple->GetValue(&right_schema, i));
+      }
+    } else {
+      for (uint32_t i = 0; i < right_schema.GetColumnCount(); i++) {
+        auto type_id = right_schema.GetColumn(i).GetType();
+        values.push_back(ValueFactory::GetNullValueByType(type_id));
+      }
     }
   }
-
   return values;
 }
 

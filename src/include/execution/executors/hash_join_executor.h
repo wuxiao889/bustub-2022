@@ -96,6 +96,7 @@ class HashJoinExecutor : public AbstractExecutor {
 
   bool build_;
   bool right_finished_;
+  bool reorded_;
 
   uint64_t cur_index_;
   std::vector<Tuple> *cur_vec_;

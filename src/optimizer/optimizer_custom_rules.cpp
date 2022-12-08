@@ -1,7 +1,13 @@
+#include <math.h>
 #include <algorithm>
+#include <cassert>
+#include <cstddef>
 #include <memory>
+#include <optional>
 #include "binder/table_ref/bound_join_ref.h"
 #include "catalog/column.h"
+#include "catalog/schema.h"
+#include "common/macros.h"
 #include "execution/expressions/abstract_expression.h"
 #include "execution/expressions/column_value_expression.h"
 #include "execution/expressions/comparison_expression.h"
@@ -10,9 +16,12 @@
 #include "execution/plans/abstract_plan.h"
 #include "execution/plans/filter_plan.h"
 #include "execution/plans/hash_join_plan.h"
+#include "execution/plans/mock_scan_plan.h"
 #include "execution/plans/nested_loop_join_plan.h"
+#include "execution/plans/seq_scan_plan.h"
 #include "execution/plans/values_plan.h"
 #include "fmt/color.h"
+#include "fmt/core.h"
 #include "optimizer/optimizer.h"
 #include "type/type.h"
 #include "type/type_id.h"
@@ -30,15 +39,36 @@ auto Optimizer::OptimizeCustom(const AbstractPlanNodeRef &plan) -> AbstractPlanN
   p = OptimizeMergeProjection(p);
   p = OptimizeFilter(p);
   p = OptimizeEliminateTrueFalseFilter(p);
+  // fmt::print("OptimizeFilter(p)\n{}\n\n", *p);
+  p = OptimizeJoinOrder(p);
+  // fmt::print("OptimizeJoinOrder(p)\n{}\n\n", *p);
   p = OptimizeMergeFilterNLJ(p);
-  // fmt::print(fg(fmt::color::brown), "OptimizeMergeFilterNLJ()\n{}\n\n", *p);
-  // p = OptimizeFilterPushDown(p);
+  // fmt::print("OptimizeMergeFilterNLJ(p)\n{}\n\n", *p);
+  p = OptimizeMergeFilterScan(p);
+
   p = OptimizeNLJAsIndexJoin(p);
-  p = OptimizeNLJAsHashJoin(p);  // Enable this rule after you have implemented hash join.
-  // p = OptimizeMergeFilterScan(p);
+  p = OptimizeNLJAsHashJoin(p);
+
+  p = OptimizeMergeFilterScan(p);
   p = OptimizeOrderByAsIndexScan(p);
+
   p = OptimizeSortLimitAsTopN(p);
   return p;
+}
+
+auto Optimizer::ReversePredict(const AbstractExpressionRef &pred) -> AbstractExpressionRef {
+  std::vector<AbstractExpressionRef> children;
+  if (const auto *const_value_expr = dynamic_cast<const ConstantValueExpression *>(pred.get())) {
+    return pred;
+  }
+  const auto *expr = dynamic_cast<const ComparisonExpression *>(pred.get());
+  assert(expr);
+  for (const auto &child : pred->GetChildren()) {
+    const auto *column_value_expr = dynamic_cast<const ColumnValueExpression *>(child.get());
+    children.emplace_back(std::make_shared<ColumnValueExpression>(
+        column_value_expr->GetTupleIdx() ^ 1, column_value_expr->GetColIdx(), column_value_expr->GetReturnType()));
+  }
+  return expr->CloneWithChildren(children);
 }
 
 auto Optimizer::OptimizeJoinOrder(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef {
@@ -47,18 +77,44 @@ auto Optimizer::OptimizeJoinOrder(const AbstractPlanNodeRef &plan) -> AbstractPl
     children.emplace_back(OptimizeJoinOrder(child));
   }
   auto optimized_plan = plan->CloneWithChildren(std::move(children));
+
   if (optimized_plan->GetType() == PlanType::NestedLoopJoin) {
-    const auto &hash_join_plan = dynamic_cast<const NestedLoopJoinPlanNode &>(*optimized_plan);
+    const auto &nlj_plan = dynamic_cast<const NestedLoopJoinPlanNode &>(*optimized_plan);
     // Has exactly two children
-    BUSTUB_ENSURE(hash_join_plan.children_.size() == 2, "hash_join_plan should have exactly 2 children.");
+    BUSTUB_ENSURE(nlj_plan.children_.size() == 2, "nls_plan should have 2 chlid");
+
+    if (const auto *cmp_expr = dynamic_cast<const ComparisonExpression *>(&nlj_plan.Predicate()); cmp_expr != nullptr) {
+      if (cmp_expr->comp_type_ == ComparisonType::Equal && nlj_plan.join_type_ == JoinType::INNER) {
+        const auto left_size = EstimatePlan(plan->GetChildAt(0));
+        const auto right_size = EstimatePlan(plan->GetChildAt(1));
+        if (left_size && right_size && left_size > right_size) {
+          return std::make_shared<NestedLoopJoinPlanNode>(nlj_plan.output_schema_, nlj_plan.GetRightPlan(),
+                                                          nlj_plan.GetLeftPlan(), ReversePredict(nlj_plan.predicate_),
+                                                          nlj_plan.join_type_);
+        }
+      }
+    }
+
+    if (const auto *const_expr = dynamic_cast<const ConstantValueExpression *>(&nlj_plan.Predicate());
+        const_expr != nullptr) {
+      if (const_expr->val_.CastAs(TypeId::BOOLEAN).GetAs<bool>()) {
+        const auto left_size = EstimatePlan(plan->GetChildAt(0));
+        const auto right_size = EstimatePlan(plan->GetChildAt(1));
+        if (left_size && right_size && left_size > right_size) {
+          return std::make_shared<NestedLoopJoinPlanNode>(nlj_plan.output_schema_, nlj_plan.GetRightPlan(),
+                                                          nlj_plan.GetLeftPlan(), ReversePredict(nlj_plan.predicate_),
+                                                          nlj_plan.join_type_);
+        }
+      }
+    }
   }
   return optimized_plan;
 }
 
-auto Optimizer::OptimizeFilterPushDown(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef {
+auto Optimizer::OptimizePredictPushDown(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef {
   std::vector<AbstractPlanNodeRef> children;
   for (const auto &child : plan->GetChildren()) {
-    children.emplace_back(OptimizeFilterPushDown(child));
+    children.emplace_back(OptimizePredictPushDown(child));
   }
   auto optimized_plan = plan->CloneWithChildren(std::move(children));
 
@@ -97,11 +153,16 @@ auto Optimizer::OptimizeFilterPushDown(const AbstractPlanNodeRef &plan) -> Abstr
     // if (const auto *expr = dynamic_cast<const LogicExpression *>(&nlj_plan.Predicate()); expr != nullptr) {
     //   fmt::print("{} {}\n", *expr, expr->GetChildren().size());
     // }
+    // if(const auto* const_expr = dynamic_cast<const ConstantValueExpression*>(nlj_plan.predicate_.get()); const_expr
+    // != nullptr){
+
+    // }
+
+    if (const auto *cmp_expr = dynamic_cast<const ComparisonExpression *>(nlj_plan.predicate_.get());
+        cmp_expr != nullptr) {
+    }
+
     if (find_expr(nlj_plan.predicate_.get()); cmp_exprs.size() > 1) {
-      fmt::print("\n");
-      for (const auto &expr : cmp_exprs) {
-        fmt::print("{}\n", *expr);
-      }
       // 找到第一个equal
       // auto it = std::find(cmp_exprs.begin(), cmp_exprs.end(),
       //                     [](const ComparisonExpression *expr) { return expr->comp_type_ == ComparisonType::Equal;
@@ -150,7 +211,6 @@ auto Optimizer::OptimizeFilter(const AbstractPlanNodeRef &plan) -> AbstractPlanN
 
   if (optimized_plan->GetType() == PlanType::Filter) {
     const auto &filter_plan = dynamic_cast<const FilterPlanNode &>(*optimized_plan);
-    fmt::print("{}\n\n", filter_plan);
     return std::make_shared<FilterPlanNode>(filter_plan.output_schema_, OptimizeFilterExpr(filter_plan.predicate_),
                                             filter_plan.GetChildPlan());
   }
@@ -158,10 +218,17 @@ auto Optimizer::OptimizeFilter(const AbstractPlanNodeRef &plan) -> AbstractPlanN
 }
 
 auto Optimizer::OptimizeFilterExpr(const AbstractExpressionRef &pred) -> AbstractExpressionRef {
+  /*
+  FilterExpr有三种情况 ConstValue Cmp Logic
+  ConstValue {true, false}
+  cmp {1 = 2, #1.0 = #0.0}
+    等号两边有三种情况constvalue, arithmetic, colvalue
+  logic {cmp and cmp and cmp or cmp}
+  */
   if (const auto *const_expr = dynamic_cast<ConstantValueExpression *>(pred.get()); const_expr != nullptr) {
-    return  pred;
+    return pred;
   }
-  
+
   if (const auto *cmp_expr = dynamic_cast<const ComparisonExpression *>(pred.get()); cmp_expr != nullptr) {
     if (const auto &left_value_expr = dynamic_cast<const ConstantValueExpression *>(cmp_expr->GetChildAt(0).get());
         left_value_expr != nullptr) {
@@ -232,8 +299,41 @@ auto Optimizer::OptimizeFilterExpr(const AbstractExpressionRef &pred) -> Abstrac
                                : left_expr;
       }
     }
+
+    return std::make_shared<LogicExpression>(left_expr, right_expr, logic_expr->logic_type_);
   }
+  assert(false);  // ?
   return pred;
+}
+
+auto Optimizer::EstimatePlan(const AbstractPlanNodeRef &plan) -> std::optional<size_t> {
+  if (plan->GetType() == PlanType::Filter) {
+    return EstimatePlan(plan->GetChildAt(0));
+  }
+
+  auto get_child_size = [&](const AbstractPlanNodeRef &pla) -> std::optional<size_t> {
+    auto left_size = EstimatePlan(plan->GetChildAt(0));
+    auto right_size = EstimatePlan(plan->GetChildAt(1));
+    if (left_size && right_size) {
+      return std::make_optional(left_size.value() + right_size.value());
+    }
+    return std::nullopt;
+  };
+
+  if (plan->GetType() == PlanType::NestedLoopJoin || plan->GetType() == PlanType::NestedLoopJoin) {
+    return get_child_size(plan);
+  }
+
+  if (plan->GetType() == PlanType::SeqScan) {
+    const auto &seq_scan = dynamic_cast<const SeqScanPlanNode &>(*plan);
+    return EstimatedCardinality(seq_scan.table_name_);
+  }
+
+  if (plan->GetType() == PlanType::MockScan) {
+    const auto &mock_scan = dynamic_cast<const MockScanPlanNode &>(*plan);
+    return EstimatedCardinality(mock_scan.GetTable());
+  }
+  return std::nullopt;
 }
 
 }  // namespace bustub
