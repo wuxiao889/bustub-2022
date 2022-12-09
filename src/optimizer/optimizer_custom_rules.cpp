@@ -27,6 +27,7 @@
 #include "execution/plans/nested_loop_join_plan.h"
 #include "execution/plans/projection_plan.h"
 #include "execution/plans/seq_scan_plan.h"
+#include "execution/plans/topn_plan.h"
 #include "execution/plans/values_plan.h"
 #include "fmt/color.h"
 #include "fmt/core.h"
@@ -395,14 +396,18 @@ cmp {1 = 2, #1.0 = #0.0}
 logic {cmp and cmp and cmp or cmp}
 */
 auto Optimizer::OptimizeFilterExpr(const AbstractExpressionRef &pred) -> AbstractExpressionRef {
-  if (const auto *const_expr = dynamic_cast<ConstantValueExpression *>(pred.get()); const_expr != nullptr) {
+  if (const auto *const_expr = dynamic_cast<const ConstantValueExpression *>(pred.get()); const_expr != nullptr) {
     return pred;
   }
 
   if (const auto *cmp_expr = dynamic_cast<const ComparisonExpression *>(pred.get()); cmp_expr != nullptr) {
-    if (const auto &left_value_expr = dynamic_cast<const ConstantValueExpression *>(cmp_expr->GetChildAt(0).get());
+
+    const auto& left_child = cmp_expr->GetChildAt(0);
+    const auto& right_child = cmp_expr->GetChildAt(1);
+
+    if (const auto &left_value_expr = dynamic_cast<const ConstantValueExpression *>(left_child.get());
         left_value_expr != nullptr) {
-      if (const auto &right_value_expr = dynamic_cast<const ConstantValueExpression *>(cmp_expr->GetChildAt(1).get());
+      if (const auto &right_value_expr = dynamic_cast<const ConstantValueExpression *>(right_child.get());
           right_value_expr != nullptr) {
         CmpBool value;
         switch (cmp_expr->comp_type_) {
@@ -489,6 +494,7 @@ auto Optimizer::EstimatePlan(const AbstractPlanNodeRef &plan) -> std::optional<s
     case PlanType::NestedLoopJoin:
     case PlanType::HashJoin:
       plan_size = get_child_size(plan);
+      break;
     case PlanType::SeqScan:
       plan_size = EstimatedCardinality(dynamic_cast<const SeqScanPlanNode &>(*plan).table_name_);
       break;
@@ -497,6 +503,7 @@ auto Optimizer::EstimatePlan(const AbstractPlanNodeRef &plan) -> std::optional<s
       break;
     case PlanType::Values:
       plan_size = dynamic_cast<const ValuesPlanNode &>(*plan).GetValues().size();
+      break;
     case PlanType::Projection:
     case PlanType::Filter:
     case PlanType::Aggregation:
@@ -506,11 +513,13 @@ auto Optimizer::EstimatePlan(const AbstractPlanNodeRef &plan) -> std::optional<s
     case PlanType::Limit:
       plan_size = dynamic_cast<const LimitPlanNode &>(*plan).GetLimit();
       break;
+    case PlanType::TopN:
+      plan_size = dynamic_cast<const TopNPlanNode &>(*plan).GetN();
+      break;
     case PlanType::IndexScan:
     case PlanType::Insert:
     case PlanType::Update:
     case PlanType::Delete:
-    case PlanType::TopN:
     case PlanType::NestedIndexJoin:
       break;
   }

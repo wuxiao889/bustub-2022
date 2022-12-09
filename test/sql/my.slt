@@ -1,0 +1,11 @@
+statement ok
+select * from __mock_t4_1m, (select * from __mock_table_1 order by colA desc limit 3) where __mock_table_1.colA = __mock_t4_1m.x;
+
+statement ok
+select * from (select * from __mock_table_1 order by colA desc limit 3) , __mock_t4_1m where __mock_table_1.colA = __mock_t4_1m.x;
+
+statement ok
+select * from (select * from __mock_table_1 order by colA desc limit 3) inner join __mock_t4_1m on __mock_table_1.colA = __mock_t4_1m.x;
+
+statement ok
+select * from __mock_t4_1m inner join (select * from __mock_table_1 order by colA desc limit 3) on __mock_t4_1m.x = __mock_table_1.colA;

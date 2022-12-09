@@ -30,6 +30,11 @@ class Optimizer {
 
   auto OptimizeCustom(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef;
 
+  /**
+   * @brief estimate plan cardinality
+   */
+  static auto EstimatePlan(const AbstractPlanNodeRef &plan) -> std::optional<size_t>;
+
  private:
   /**
    * @brief merge projections that do identical project.
@@ -131,12 +136,7 @@ class Optimizer {
    * @param table_name
    * @return std::optional<size_t>
    */
-  auto EstimatedCardinality(const std::string &table_name) -> std::optional<size_t>;
-
-  /**
-   * @brief estimate plan cardinality
-   */
-  auto EstimatePlan(const AbstractPlanNodeRef &plan) -> std::optional<size_t>;
+  static auto EstimatedCardinality(const std::string &table_name) -> std::optional<size_t>;
 
   /**
    * @brief only use logic::and to build new log expr
