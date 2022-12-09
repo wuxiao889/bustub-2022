@@ -214,7 +214,7 @@ io_file
 Makefile.config
 
 # build, distribute, and bins (+ python proto bindings)
-build-vscode/*
+build-vscode
 build_debug/*
 .build_debug/*
 .build_release/*

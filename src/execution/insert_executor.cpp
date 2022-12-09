@@ -53,9 +53,7 @@ auto InsertExecutor::Next(Tuple *tuple, RID *rid) -> bool {
     }
   }
 
-  std::vector<Value> values;
-  values.emplace_back(ValueFactory::GetIntegerValue(cnt));
-  *tuple = Tuple{values, &plan_->OutputSchema()};
+  *tuple = Tuple{{ValueFactory::GetIntegerValue(cnt)}, &plan_->OutputSchema()};
   return true;
 }
 

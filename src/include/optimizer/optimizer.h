@@ -38,7 +38,7 @@ class Optimizer {
    */
   auto OptimizeMergeProjection(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef;
 
-  auto OptimizeColumnPruning(AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef;
+  auto OptimizeColumnPruning(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef;
   /**
    * @brief merge filter condition into nested loop join.
    * In planner, we plan cross join + filter with cross product (done with nested loop join) and a filter plan node. We
@@ -78,13 +78,16 @@ class Optimizer {
    */
   auto OptimizeJoinOrder(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef;
 
-  auto OptimizeNLJPredicate(AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef;
+  auto OptimizeNLJPredicate(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef;
 
   /**
    * @brief optimize filter plan predicate
    */
   auto OptimizeFilter(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef;
 
+  auto OptimizePickIndex(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef;
+
+  //   auto OptimizePick
   /**
    * @brief 优化逻辑表达式中的常量
    */
