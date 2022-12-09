@@ -284,6 +284,8 @@ auto BPLUSTREE_TYPE::InsertPessimistic(const KeyType &key, const ValueType &valu
   LeafPage *right_node = CastLeafPage(right_page);
 
   leaf_node->Split(right_node);
+  right_node->SetNextPageId(leaf_node->GetNextPageId());
+  leaf_node->SetNextPageId(right_node->GetPageId());
 
   if (right_most_ == leaf_node->GetPageId()) {
     right_most_ = right_page_id;
@@ -321,11 +323,6 @@ void BPLUSTREE_TYPE::InsertInParent(BPlusTreePage *left_node, BPlusTreePage *rig
     left_node->SetParentPageId(root_page_id_);
     right_node->SetParentPageId(root_page_id_);
     buffer_pool_manager_->UnpinPage(root_page_id_, true);
-
-    if (left_node->IsLeafPage()) {
-      auto left_leaf_node = CastLeafPage(left_node);
-      left_leaf_node->SetNextPageId(right_node->GetPageId());
-    }
     return;
   }
 
@@ -339,13 +336,6 @@ void BPLUSTREE_TYPE::InsertInParent(BPlusTreePage *left_node, BPlusTreePage *rig
   transaction->GetPageSet()->pop_back();
 
   assert(parent_node->GetSize() <= parent_node->GetMaxSize());
-
-  if (left_node->IsLeafPage()) {
-    auto left_leaf_node = CastLeafPage(left_node);
-    auto right_leaf_node = CastLeafPage(right_node);
-    right_leaf_node->SetNextPageId(left_leaf_node->GetNextPageId());
-    left_leaf_node->SetNextPageId(right_node->GetPageId());
-  }
 
   // parent有空位
   if (IsSafe(parent_node, INSERT)) {
@@ -811,7 +801,7 @@ auto BPLUSTREE_TYPE::Begin(const KeyType &key) -> INDEXITERATOR_TYPE {
   if (index == leaf_node->GetSize()) {
     page->RUnlatch();
     buffer_pool_manager_->UnpinPage(page->GetPageId(), false);
-    return End();
+    return {};
   }
   MappingType value = (*leaf_node)[index];
   page_id_t page_id = page->GetPageId();

@@ -401,9 +401,8 @@ auto Optimizer::OptimizeFilterExpr(const AbstractExpressionRef &pred) -> Abstrac
   }
 
   if (const auto *cmp_expr = dynamic_cast<const ComparisonExpression *>(pred.get()); cmp_expr != nullptr) {
-
-    const auto& left_child = cmp_expr->GetChildAt(0);
-    const auto& right_child = cmp_expr->GetChildAt(1);
+    const auto &left_child = cmp_expr->GetChildAt(0);
+    const auto &right_child = cmp_expr->GetChildAt(1);
 
     if (const auto &left_value_expr = dynamic_cast<const ConstantValueExpression *>(left_child.get());
         left_value_expr != nullptr) {

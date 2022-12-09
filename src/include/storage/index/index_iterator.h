@@ -55,7 +55,6 @@ class IndexIterator {
   int position_{0};
   BufferPoolManager *buffer_pool_manager_{};
   MappingType value_;
-  Page *cur_page_;
 
   auto IsEnd() -> bool;
 };

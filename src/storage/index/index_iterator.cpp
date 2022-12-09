@@ -32,11 +32,7 @@ INDEX_TEMPLATE_ARGUMENTS
 INDEXITERATOR_TYPE::~IndexIterator() = default;
 
 INDEX_TEMPLATE_ARGUMENTS
-auto INDEXITERATOR_TYPE::IsEnd() -> bool {
-  assert(cur_page_);
-  auto node = reinterpret_cast<LeafPage *>(cur_page_->GetData());
-  return node->GetNextPageId() == INVALID_PAGE_ID && position_ == node->GetSize();
-}
+auto INDEXITERATOR_TYPE::IsEnd() -> bool { return true; }
 
 INDEX_TEMPLATE_ARGUMENTS
 auto INDEXITERATOR_TYPE::operator*() -> const MappingType & {
@@ -46,42 +42,39 @@ auto INDEXITERATOR_TYPE::operator*() -> const MappingType & {
 
 INDEX_TEMPLATE_ARGUMENTS
 auto INDEXITERATOR_TYPE::operator++() -> INDEXITERATOR_TYPE & {
-  cur_page_ = buffer_pool_manager_->FetchPage(page_id_);
-  assert(cur_page_ != nullptr);
+  auto page = buffer_pool_manager_->FetchPage(page_id_);
 
-  cur_page_->RLatch();
-  auto node = reinterpret_cast<LeafPage *>(cur_page_->GetData());
+  page->RLatch();
+  auto node = reinterpret_cast<LeafPage *>(page->GetData());
 
   if (++position_ != node->GetSize()) {
     value_ = (*node)[position_];
-
-    cur_page_->RUnlatch();
+    page->RUnlatch();
     buffer_pool_manager_->UnpinPage(page_id_, false);
-    cur_page_ = nullptr;
     return *this;
   }
 
-  if (IsEnd()) {
-    cur_page_->RUnlatch();
-    buffer_pool_manager_->UnpinPage(cur_page_->GetPageId(), false);
+  if (node->GetNextPageId() == INVALID_PAGE_ID && position_ == node->GetSize()) {
+    page->RUnlatch();
+    buffer_pool_manager_->UnpinPage(page->GetPageId(), false);
     *this = {};
     return *this;
   }
 
   Page *next_page = buffer_pool_manager_->FetchPage(node->GetNextPageId());
-  cur_page_->RUnlatch();
-  buffer_pool_manager_->UnpinPage(cur_page_->GetPageId(), false);
+  assert(next_page);
+  page->RUnlatch();
+  buffer_pool_manager_->UnpinPage(page->GetPageId(), false);
 
-  cur_page_ = next_page;
-
-  cur_page_->RLatch();
-  page_id_ = cur_page_->GetPageId();
+  page = next_page;
+  page->RLatch();
+  page_id_ = page->GetPageId();
   position_ = 0;
-  node = reinterpret_cast<LeafPage *>(cur_page_->GetData());
+  node = reinterpret_cast<LeafPage *>(page->GetData());
   value_ = (*node)[position_];
-  cur_page_->RUnlatch();
+  page->RUnlatch();
+  buffer_pool_manager_->UnpinPage(page_id_, false);
 
-  cur_page_ = nullptr;
   return *this;
 }
 
