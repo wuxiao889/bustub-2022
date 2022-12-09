@@ -38,6 +38,7 @@ class Optimizer {
    */
   auto OptimizeMergeProjection(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef;
 
+  auto OptimizeColumnPruning(AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef;
   /**
    * @brief merge filter condition into nested loop join.
    * In planner, we plan cross join + filter with cross product (done with nested loop join) and a filter plan node. We

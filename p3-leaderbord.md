@@ -83,9 +83,30 @@ Projection { exprs=[#0.0, #0.1, #0.7] } | (__subquery#0.t7.v:INTEGER, __subquery
         SeqScan { table=t7 } | (t7.v:INTEGER, t7.v1:INTEGER, t7.v2:INTEGER)
         Filter { predicate=(1=2) } | (__subquery#1.t8.v4:INTEGER)
           SeqScan { table=t8 } | (t8.v4:INTEGER)
+
+
+
+ Projection { exprs=[#0.0, #0.1, #0.2]    
+
+   Projection { exprs=[#0.0, #0.1, ((#0.2+#0.3)+#0.4), #0.5, #0.6, #0.7, (#0.8+#0.9), (#0.10+#0.11), #0.12, #0.13, #0.14, (#0.15+#0.16), (#0.17+#0.18), #0.19, #0.20, #0.21, (#0.22+#0.23), (#0.24+#0.25), #0.26, #0.27, #0.28, (#0.29+#0.30), (#0.31+#0.32), #0.33, #0.34, #0.35, (#0.36+#0.37), (#0.38+#0.39), #0.40, #0.41, #0.42, (#0.43+#0.44), (#0.45+#0.46), #0.47, #0.48, #0.49, (#0.50+#0.51), (#0.52+#0.53), #0.54, #0.55, #0.56, (#0.57+#0.58), (#0.59+#0.60)] }                                                                                                                                                                                                                                                
+     Agg { types=[max, max, max, max, min, max, min, max, min, max, min, min, max, min, max, min, max, min, min, max, min, max, min, max, min, min, max, min, max, min, max, min, min, max, min, max, min, max, min, min, max, min, max, min, max, min, min, max, min, max, min, max, min, min, max, min, max, min, max, min], aggregates=[#0.1, #0.1, #0.1, #0.2, #0.1, #0.2, #0.2, #0.1, #0.1, #0.2, #0.2, #0.1, #0.2, #0.2, #0.1, #0.1, #0.2, #0.2, #0.1, #0.2, #0.2, #0.1, #0.1, #0.2, #0.2, #0.1, #0.2, #0.2, #0.1, #0.1, #0.2, #0.2, #0.1, #0.2, #0.2, #0.1, #0.1, #0.2, #0.2, #0.1, #0.2, #0.2, #0.1, #0.1, #0.2, #0.2, #0.1, #0.2, #0.2, #0.1, #0.1, #0.2, #0.2, #0.1, #0.2, #0.2, #0.1, #0.1, #0.2, #0.2], group_by=[#0.0] } 
+       NestedLoopJoin { type=Left, predicate=(#0.0<#1.0) }                                                      
+         
+         MockScan {table=__mock_t7}   
+         Values { rows=0 }    
 ```
 
 
+
+Column Pruning – you only need to compute v, d1, d2 from the left table in aggregation, common expression elimination, 
+
+transform always false filter to dummy scan (values plan node of zero rows).
+
+you only need to implement push down predicates over hash join / nested loop joins
+
+a complete join reordering requires you to handle predicates correctly (and maybe absorb filters in-between back to the join predicate),  ???
+
+从中间的filter吸收回连接谓词
 
 ```
 updating: src/include/execution/executors/aggregation_executor.h (deflated 74%)

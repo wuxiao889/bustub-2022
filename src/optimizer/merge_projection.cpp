@@ -26,13 +26,14 @@ auto Optimizer::OptimizeMergeProjection(const AbstractPlanNodeRef &plan) -> Abst
     const auto &projection_schema = projection_plan.OutputSchema();
     const auto &child_columns = child_schema.GetColumns();
     const auto &projection_columns = projection_schema.GetColumns();
+    // 上下计划类型相同
     if (std::equal(child_columns.begin(), child_columns.end(), projection_columns.begin(), projection_columns.end(),
                    [](auto &&child_col, auto &&proj_col) {
                      // TODO(chi): consider VARCHAR length
                      return child_col.GetType() == proj_col.GetType();
                    })) {
       const auto &exprs = projection_plan.GetExpressions();
-      // If all items are column value expressions
+      // If all items are column value expressions，所有列都是下层列的直接映射, 并且顺序不变
       bool is_identical = true;
       for (size_t idx = 0; idx < exprs.size(); idx++) {
         auto column_value_expr = dynamic_cast<const ColumnValueExpression *>(exprs[idx].get());

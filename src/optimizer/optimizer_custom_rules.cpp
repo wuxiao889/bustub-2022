@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <unordered_set>
 #include <vector>
 #include "binder/bound_expression.h"
 #include "binder/table_ref/bound_join_ref.h"
@@ -11,19 +12,23 @@
 #include "catalog/schema.h"
 #include "common/macros.h"
 #include "execution/expressions/abstract_expression.h"
+#include "execution/expressions/arithmetic_expression.h"
 #include "execution/expressions/column_value_expression.h"
 #include "execution/expressions/comparison_expression.h"
 #include "execution/expressions/constant_value_expression.h"
 #include "execution/expressions/logic_expression.h"
 #include "execution/plans/abstract_plan.h"
+#include "execution/plans/aggregation_plan.h"
 #include "execution/plans/filter_plan.h"
 #include "execution/plans/hash_join_plan.h"
 #include "execution/plans/mock_scan_plan.h"
 #include "execution/plans/nested_loop_join_plan.h"
+#include "execution/plans/projection_plan.h"
 #include "execution/plans/seq_scan_plan.h"
 #include "execution/plans/values_plan.h"
 #include "fmt/color.h"
 #include "fmt/core.h"
+#include "fmt/ranges.h"
 #include "optimizer/optimizer.h"
 #include "type/type.h"
 #include "type/type_id.h"
@@ -38,7 +43,11 @@ namespace bustub {
 
 auto Optimizer::OptimizeCustom(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef {
   auto p = plan;
+  // fmt::print("p\n{}\n\n", *p);
   p = OptimizeMergeProjection(p);
+  // fmt::print("OptimizeMergeProjection(p)\n{}\n\n", *p);
+  p = OptimizeColumnPruning(p);
+  // fmt::print("OptimizeColumnPruning(p)\n{}\n\n", *p);
   p = OptimizeFilter(p);
   p = OptimizeEliminateTrueFalseFilter(p);
   // fmt::print("OptimizeFilter(p)\n{}\n\n", *p);
@@ -56,6 +65,100 @@ auto Optimizer::OptimizeCustom(const AbstractPlanNodeRef &plan) -> AbstractPlanN
   p = OptimizeOrderByAsIndexScan(p);
   p = OptimizeSortLimitAsTopN(p);
   return p;
+}
+
+auto Optimizer::OptimizeColumnPruning(AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef {
+  if (plan->GetType() == PlanType::Projection) {
+    const auto &projection_plan = dynamic_cast<const ProjectionPlanNode &>(*plan);
+    BUSTUB_ENSURE(plan->children_.size() == 1, "Projection with multiple children?? That's weird!");
+    // If the schema is the same (except column name)
+    const auto &child_plan = plan->children_[0];
+    const auto child_plan_type = child_plan->GetType();
+    if (child_plan_type == PlanType::Projection || child_plan_type == PlanType::Aggregation) {
+      const auto &projection_schema = projection_plan.output_schema_;
+      const auto &projection_exprs = projection_plan.GetExpressions();
+
+      std::unordered_set<size_t> needed_col;
+
+      // col_value / arithmetic / const_val ?
+      std::function<void(const AbstractExpressionRef &)> find_col_in_arithmetic =
+          [&](const AbstractExpressionRef &expr) {
+            // fmt::print("{}\n", *expr);
+            if (auto arithmetic_expr = dynamic_cast<const ArithmeticExpression *>(expr.get());
+                arithmetic_expr != nullptr) {
+              find_col_in_arithmetic(expr->GetChildAt(0));
+              find_col_in_arithmetic(expr->GetChildAt(1));
+            } else if (auto column_value_expr = dynamic_cast<const ColumnValueExpression *>(expr.get());
+                       column_value_expr != nullptr) {
+              BUSTUB_ENSURE(column_value_expr->GetTupleIdx() == 0, "projection plan tuple index must be 0");
+              needed_col.insert(column_value_expr->GetColIdx());
+            }
+          };
+
+      for (const auto &expr : projection_exprs) {
+        if (auto column_value_expr = dynamic_cast<const ColumnValueExpression *>(expr.get());
+            column_value_expr != nullptr) {
+          BUSTUB_ENSURE(column_value_expr->GetTupleIdx() == 0, "projection plan tuple index must be 0");
+          needed_col.insert(column_value_expr->GetColIdx());
+
+        } else if (auto arithmetic_expr = dynamic_cast<const ArithmeticExpression *>(expr.get());
+                   arithmetic_expr != nullptr) {
+          find_col_in_arithmetic(expr);
+        }
+      }
+
+      // fmt::print("{}\n", needed_col);
+
+      std::vector<AbstractExpressionRef> needed_exprs;
+
+      if (child_plan_type == PlanType::Projection) {
+        const auto &child_projection_plan = dynamic_cast<const ProjectionPlanNode &>(*child_plan);
+        const auto &child_projection_exprs = child_projection_plan.GetExpressions();
+
+        for (size_t idx = 0; idx < child_projection_exprs.size(); ++idx) {
+          if (needed_col.find(idx) != needed_col.end()) {
+            needed_exprs.push_back(child_projection_exprs[idx]);
+          }
+        }
+
+        if (needed_exprs.size() != child_projection_exprs.size()) {
+          auto new_schema = std::make_shared<Schema>(ProjectionPlanNode::InferProjectionSchema(needed_exprs));
+          auto new_child_projection_plan =
+              std::make_shared<ProjectionPlanNode>(new_schema, std::move(needed_exprs), child_plan->GetChildAt(0));
+          plan = std::make_shared<ProjectionPlanNode>(projection_schema, projection_exprs, new_child_projection_plan);
+        }
+
+      } else {
+        const auto &child_agg_plan = dynamic_cast<const AggregationPlanNode &>(*child_plan);
+        const auto &child_agg_exprs = child_agg_plan.GetAggregates();
+        const auto &chld_agg_types = child_agg_plan.GetAggregateTypes();
+
+        std::vector<AggregationType> needed_types;
+
+        for (size_t idx = 0; idx < child_agg_exprs.size(); ++idx) {
+          if (needed_col.find(idx) != needed_col.end()) {
+            needed_exprs.push_back(child_agg_exprs[idx]);
+            needed_types.push_back(chld_agg_types[idx]);
+          }
+        }
+
+        if (needed_exprs.size() != child_agg_exprs.size()) {
+          auto new_schema = std::make_shared<Schema>(
+              AggregationPlanNode::InferAggSchema(child_agg_plan.group_bys_, needed_exprs, needed_types));
+          auto new_child_agg_plan = std::make_shared<AggregationPlanNode>(
+              new_schema, child_agg_plan.GetChildPlan(), child_agg_plan.group_bys_, needed_exprs, needed_types);
+          plan = std::make_shared<ProjectionPlanNode>(projection_schema, projection_exprs, new_child_agg_plan);
+        }
+      }
+    }
+  }
+
+  std::vector<AbstractPlanNodeRef> children;
+  for (auto child : plan->GetChildren()) {
+    children.emplace_back(OptimizeColumnPruning(child));
+  }
+  auto optimized_plan = plan->CloneWithChildren(std::move(children));
+  return optimized_plan;
 }
 
 auto Optimizer::RewriteTupleIndex(const AbstractExpressionRef &pred) -> AbstractExpressionRef {
@@ -86,7 +189,9 @@ auto Optimizer::OptimizeJoinOrder(const AbstractPlanNodeRef &plan) -> AbstractPl
     if (nlj_plan.join_type_ == JoinType::INNER) {
       const auto left_size = EstimatePlan(plan->GetChildAt(0));
       const auto right_size = EstimatePlan(plan->GetChildAt(1));
+      // std::optional 可以直接当作bool判断
       if (left_size && right_size && left_size > right_size) {
+        // 在join中通过对比schema第一列的表名判断是否reorder
         return std::make_shared<NestedLoopJoinPlanNode>(nlj_plan.output_schema_, nlj_plan.GetRightPlan(),
                                                         nlj_plan.GetLeftPlan(), RewriteTupleIndex(nlj_plan.predicate_),
                                                         nlj_plan.join_type_);
@@ -101,10 +206,10 @@ auto Optimizer::OptimizeNLJPredicate(AbstractPlanNodeRef &plan) -> AbstractPlanN
   std::vector<AbstractExpressionRef> right_cmp_exprs;
   std::vector<AbstractExpressionRef> col_equal_exprs;
 
-  std::function<void(const AbstractExpressionRef &)> find_expr = [&](const AbstractExpressionRef &pred) {
+  std::function<void(const AbstractExpressionRef &)> gather_expr = [&](const AbstractExpressionRef &pred) {
     if (const auto *logic_expr = dynamic_cast<const LogicExpression *>(pred.get()); logic_expr != nullptr) {
-      find_expr(pred->GetChildAt(0));
-      find_expr(pred->GetChildAt(1));
+      gather_expr(pred->GetChildAt(0));
+      gather_expr(pred->GetChildAt(1));
     }
 
     if (const auto *cmp_expr = dynamic_cast<const ComparisonExpression *>(pred.get()); cmp_expr != nullptr) {
@@ -156,7 +261,7 @@ auto Optimizer::OptimizeNLJPredicate(AbstractPlanNodeRef &plan) -> AbstractPlanN
     // 复杂逻辑表达式才要下推
     if (const auto *logic_expr = dynamic_cast<const LogicExpression *>(nlj_plan.predicate_.get());
         logic_expr != nullptr) {
-      find_expr(nlj_plan.predicate_);
+      gather_expr(nlj_plan.predicate_);
       // auto show_expr = [](const auto &exprs) {
       //   for (auto &expr : exprs) {
       //     fmt::print("{}\n", *expr);
