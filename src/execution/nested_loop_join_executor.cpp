@@ -93,14 +93,14 @@ auto NestedLoopJoinExecutor::Next(Tuple *tuple, RID *rid) -> bool {
       if (!value.IsNull() && value.GetAs<bool>()) {
         joined_ = true;
         std::vector<Value> vec = GenerateValue(&left_tuple_, left_schema, &right_tuple, right_schema);
-        *tuple = Tuple{vec, &GetOutputSchema()};
+        *tuple = Tuple{std::move(vec), &GetOutputSchema()}; // avoid copy
         return true;
       }
     }
 
     if (plan_->GetJoinType() == JoinType::LEFT && !joined_) {
       std::vector<Value> vec = GenerateValue(&left_tuple_, left_schema, nullptr, right_schema);
-      *tuple = Tuple{vec, &GetOutputSchema()};
+      *tuple = Tuple{std::move(vec), &GetOutputSchema()};
       AnotherLoop();
       return true;
     }

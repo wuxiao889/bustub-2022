@@ -85,7 +85,7 @@ auto HashJoinExecutor::Next(Tuple *tuple, RID *rid) -> bool {
         values = GenerateValue(&left_tupe, left_schema, &right_tuple_, right_schema);
       }
 
-      *tuple = {values, &plan_->OutputSchema()};
+      *tuple = {std::move(values), &plan_->OutputSchema()}; // avoid copy
       cur_index_++;
       return true;
     }
@@ -103,7 +103,7 @@ auto HashJoinExecutor::Next(Tuple *tuple, RID *rid) -> bool {
       }
 
       right_finished_ = true;
-      auto not_joined_it = not_joined_.begin();
+      const auto not_joined_it = not_joined_.begin();
       if (not_joined_it != not_joined_.end()) {
         key = *not_joined_it;
       } else {
@@ -115,7 +115,7 @@ auto HashJoinExecutor::Next(Tuple *tuple, RID *rid) -> bool {
       key = MakeRightJoinKey(&right_tuple_);
     }
 
-    auto left_ht_it = left_ht_.find(key);
+    const auto left_ht_it = left_ht_.find(key);
 
     if (left_ht_it != left_ht_.end()) {
       not_joined_.erase(key);

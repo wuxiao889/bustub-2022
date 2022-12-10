@@ -12,6 +12,7 @@
 #include "execution/executors/aggregation_executor.h"
 #include <cstdint>
 #include <memory>
+#include <utility>
 #include <vector>
 
 #include "fmt/core.h"
@@ -53,7 +54,7 @@ auto AggregationExecutor::Next(Tuple *tuple, RID *rid) -> bool {
       values = aht_iterator_.Key().group_bys_;
     }
     values.insert(values.end(), aht_iterator_.Val().aggregates_.begin(), aht_iterator_.Val().aggregates_.end());
-    *tuple = Tuple{values, &plan_->OutputSchema()};
+    *tuple = Tuple{std::move(values), &plan_->OutputSchema()};
     ++aht_iterator_;
     return true;
   }

@@ -60,7 +60,7 @@ auto NestIndexJoinExecutor::Next(Tuple *tuple, RID *rid) -> bool {
 
     if (result.empty() && plan_->GetJoinType() == JoinType::LEFT) {
       auto vec = GenerateValue(&outer_tuple, outer_schema, nullptr, inner_schema);
-      *tuple = Tuple{vec, &plan_->OutputSchema()};
+      *tuple = Tuple{std::move(vec), &plan_->OutputSchema()}; // avoid copy
       return true;
     }
 
@@ -70,7 +70,7 @@ auto NestIndexJoinExecutor::Next(Tuple *tuple, RID *rid) -> bool {
       table_page = reinterpret_cast<TablePage *>(bpm->FetchPage(inner_rid.GetPageId())->GetData());
       table_page->GetTuple(inner_rid, &inner_tuple, txn, exec_ctx_->GetLockManager());
       auto vec = GenerateValue(&outer_tuple, outer_schema, &inner_tuple, inner_schema);
-      *tuple = Tuple{vec, &plan_->OutputSchema()};
+      *tuple = Tuple{std::move(vec), &plan_->OutputSchema()};
       bpm->UnpinPage(rid->GetPageId(), false);
 
       return true;

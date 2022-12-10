@@ -78,7 +78,7 @@ auto Optimizer::OptimizeCustom(const AbstractPlanNodeRef &plan) -> AbstractPlanN
 auto Optimizer::OptimizeColumnPruning(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef {
   auto optimized_plan = plan;
   if (plan->GetType() == PlanType::Projection) {
-    const auto &projection_plan = dynamic_cast<const ProjectionPlanNode &>(*plan);
+    const auto &projection_plan = static_cast<const ProjectionPlanNode &>(*plan);
     BUSTUB_ENSURE(plan->children_.size() == 1, "Projection with multiple children?? That's weird!");
     // If the schema is the same (except column name)
     const auto &child_plan = plan->children_[0];
@@ -118,7 +118,7 @@ auto Optimizer::OptimizeColumnPruning(const AbstractPlanNodeRef &plan) -> Abstra
       std::vector<AbstractExpressionRef> needed_exprs;
 
       if (child_plan_type == PlanType::Projection) {
-        const auto &child_projection_plan = dynamic_cast<const ProjectionPlanNode &>(*child_plan);
+        const auto &child_projection_plan = static_cast<const ProjectionPlanNode &>(*child_plan);
         const auto &child_projection_exprs = child_projection_plan.GetExpressions();
 
         for (size_t idx = 0; idx < child_projection_exprs.size(); ++idx) {
@@ -197,7 +197,7 @@ auto Optimizer::OptimizeJoinOrder(const AbstractPlanNodeRef &plan) -> AbstractPl
   auto optimized_plan = plan->CloneWithChildren(std::move(children));
 
   if (optimized_plan->GetType() == PlanType::NestedLoopJoin) {
-    const auto &nlj_plan = dynamic_cast<const NestedLoopJoinPlanNode &>(*optimized_plan);
+    const auto &nlj_plan = static_cast<const NestedLoopJoinPlanNode &>(*optimized_plan);
     // Has exactly two children
     BUSTUB_ENSURE(nlj_plan.children_.size() == 2, "nls_plan should have 2 chlid");
     if (nlj_plan.join_type_ == JoinType::INNER) {
@@ -275,7 +275,7 @@ auto Optimizer::OptimizeNLJPredicate(const AbstractPlanNodeRef &plan) -> Abstrac
   };
 
   if (plan->GetType() == PlanType::NestedLoopJoin) {
-    const auto &nlj_plan = dynamic_cast<const NestedLoopJoinPlanNode &>(*plan);
+    const auto &nlj_plan = static_cast<const NestedLoopJoinPlanNode &>(*plan);
     // Has exactly two children
     BUSTUB_ENSURE(nlj_plan.children_.size() == 2, "NLJ should have exactly 2 children.");
     // 复杂逻辑表达式才要下推
@@ -311,7 +311,7 @@ auto Optimizer::OptimizeNLJPredicate(const AbstractPlanNodeRef &plan) -> Abstrac
               // 在中间插入filter, 后续optimize会下推
               new_left_plan = std::make_shared<FilterPlanNode>(left_plan->output_schema_, new_expr, left_plan);
             } else if (left_plan_type == PlanType::NestedLoopJoin) {
-              const auto *left_nlj_plan = dynamic_cast<const NestedLoopJoinPlanNode *>(left_plan.get());
+              const auto *left_nlj_plan = static_cast<const NestedLoopJoinPlanNode *>(left_plan.get());
               // 构造新表达式
               auto new_left_nlj_expr =
                   std::make_shared<LogicExpression>(new_expr, left_nlj_plan->predicate_, LogicType::And);
@@ -328,7 +328,7 @@ auto Optimizer::OptimizeNLJPredicate(const AbstractPlanNodeRef &plan) -> Abstrac
               new_right_plan = std::make_shared<FilterPlanNode>(right_plan->output_schema_, new_expr, right_plan);
 
             } else if (right_plan_type == PlanType::NestedLoopJoin) {
-              const auto *right_nlj_plan = dynamic_cast<const NestedLoopJoinPlanNode *>(right_plan.get());
+              const auto *right_nlj_plan = static_cast<const NestedLoopJoinPlanNode *>(right_plan.get());
               auto new_right_nlj_expr =
                   std::make_shared<LogicExpression>(new_expr, right_nlj_plan->predicate_, LogicType::And);
 
@@ -360,7 +360,7 @@ auto Optimizer::OptimizeEliminateTrueFalseFilter(const AbstractPlanNodeRef &plan
   auto optimized_plan = plan->CloneWithChildren(std::move(children));
 
   if (optimized_plan->GetType() == PlanType::Filter) {
-    const auto &filter_plan = dynamic_cast<const FilterPlanNode &>(*optimized_plan);
+    const auto &filter_plan = static_cast<const FilterPlanNode &>(*optimized_plan);
     if (const auto *const_expr = dynamic_cast<const ConstantValueExpression *>(filter_plan.predicate_.get());
         const_expr != nullptr) {
       if (!const_expr->val_.CastAs(TypeId::BOOLEAN).GetAs<bool>()) {
@@ -381,7 +381,7 @@ auto Optimizer::OptimizeFilter(const AbstractPlanNodeRef &plan) -> AbstractPlanN
   auto optimized_plan = plan->CloneWithChildren(std::move(children));
 
   if (optimized_plan->GetType() == PlanType::Filter) {
-    const auto &filter_plan = dynamic_cast<const FilterPlanNode &>(*optimized_plan);
+    const auto &filter_plan = static_cast<const FilterPlanNode &>(*optimized_plan);
     return std::make_shared<FilterPlanNode>(filter_plan.output_schema_, OptimizeFilterExpr(filter_plan.predicate_),
                                             filter_plan.GetChildPlan());
   }
@@ -444,7 +444,8 @@ auto Optimizer::OptimizeFilterExpr(const AbstractExpressionRef &pred) -> Abstrac
   auto left_expr = OptimizeFilterExpr(pred->GetChildAt(0));
   auto right_expr = OptimizeFilterExpr(pred->GetChildAt(1));
 
-  const auto *logic_expr = dynamic_cast<const LogicExpression *>(pred.get());
+  assert(pred->GetReturnType() == TypeId::BOOLEAN);
+  const auto *logic_expr = static_cast<const LogicExpression *>(pred.get());
   const auto &logic_type = logic_expr->logic_type_;
 
   if (const auto *left_const_expr = dynamic_cast<const ConstantValueExpression *>(left_expr.get());
@@ -495,13 +496,13 @@ auto Optimizer::EstimatePlan(const AbstractPlanNodeRef &plan) -> std::optional<s
       plan_size = get_child_size(plan);
       break;
     case PlanType::SeqScan:
-      plan_size = EstimatedCardinality(dynamic_cast<const SeqScanPlanNode &>(*plan).table_name_);
+      plan_size = EstimatedCardinality(static_cast<const SeqScanPlanNode &>(*plan).table_name_);
       break;
     case PlanType::MockScan:
-      plan_size = EstimatedCardinality(dynamic_cast<const MockScanPlanNode &>(*plan).GetTable());
+      plan_size = EstimatedCardinality(static_cast<const MockScanPlanNode &>(*plan).GetTable());
       break;
     case PlanType::Values:
-      plan_size = dynamic_cast<const ValuesPlanNode &>(*plan).GetValues().size();
+      plan_size = static_cast<const ValuesPlanNode &>(*plan).GetValues().size();
       break;
     case PlanType::Projection:
     case PlanType::Filter:
@@ -510,10 +511,10 @@ auto Optimizer::EstimatePlan(const AbstractPlanNodeRef &plan) -> std::optional<s
       plan_size = EstimatePlan(plan->GetChildAt(0));
       break;
     case PlanType::Limit:
-      plan_size = dynamic_cast<const LimitPlanNode &>(*plan).GetLimit();
+      plan_size = static_cast<const LimitPlanNode &>(*plan).GetLimit();
       break;
     case PlanType::TopN:
-      plan_size = dynamic_cast<const TopNPlanNode &>(*plan).GetN();
+      plan_size = static_cast<const TopNPlanNode &>(*plan).GetN();
       break;
     case PlanType::IndexScan:
     case PlanType::Insert:
