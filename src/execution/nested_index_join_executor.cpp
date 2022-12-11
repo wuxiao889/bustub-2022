@@ -60,7 +60,7 @@ auto NestIndexJoinExecutor::Next(Tuple *tuple, RID *rid) -> bool {
 
     if (result.empty() && plan_->GetJoinType() == JoinType::LEFT) {
       auto vec = GenerateValue(&outer_tuple, outer_schema, nullptr, inner_schema);
-      *tuple = Tuple{std::move(vec), &plan_->OutputSchema()}; // avoid copy
+      *tuple = Tuple{std::move(vec), &plan_->OutputSchema()};  // avoid copy
       return true;
     }
 

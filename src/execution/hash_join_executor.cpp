@@ -85,7 +85,7 @@ auto HashJoinExecutor::Next(Tuple *tuple, RID *rid) -> bool {
         values = GenerateValue(&left_tupe, left_schema, &right_tuple_, right_schema);
       }
 
-      *tuple = {std::move(values), &plan_->OutputSchema()}; // avoid copy
+      *tuple = {std::move(values), &plan_->OutputSchema()};  // avoid copy
       cur_index_++;
       return true;
     }

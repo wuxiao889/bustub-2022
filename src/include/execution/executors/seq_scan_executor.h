@@ -14,6 +14,7 @@
 
 #include <vector>
 
+#include "common/config.h"
 #include "common/rid.h"
 #include "execution/executor_context.h"
 #include "execution/executors/abstract_executor.h"
@@ -55,5 +56,6 @@ class SeqScanExecutor : public AbstractExecutor {
   const SeqScanPlanNode *plan_;
   TableInfo *table_info_;
   TableIterator cur_;
+  page_id_t cur_page_id_;
 };
 }  // namespace bustub
