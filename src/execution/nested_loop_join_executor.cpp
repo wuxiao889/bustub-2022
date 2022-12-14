@@ -85,7 +85,7 @@ auto NestedLoopJoinExecutor::Next(Tuple *tuple, RID *rid) -> bool {
     }
 
     Tuple right_tuple;
-    
+
     while (right_child_executor_->Next(&right_tuple, rid)) {
       auto value = join_expr.EvaluateJoin(&left_tuple_, left_schema, &right_tuple, right_schema);
       // fmt::print("left:{} \t right:{} \t joined:{}\n", left_tuple_.ToString(&left_schema),

@@ -14,12 +14,14 @@
 
 #include <algorithm>
 #include <condition_variable>  // NOLINT
+#include <cstddef>
 #include <list>
 #include <memory>
 #include <mutex>  // NOLINT
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include "common/config.h"
@@ -333,8 +335,35 @@ class LockManager {
 
   /*** Graph API ***/
 
+  /*
+  NOTES
+
+  Your background thread should build the graph on the fly every time it wakes up. You should not be maintaining a
+  graph, it should be built and destroyed every time the thread wakes up.
+
+  Your DFS Cycle detection algorithm must be deterministic. In order to do achieve this, you must always choose to
+  explore the lowest transaction id first.
+  This means when choosing which unexplored node to run DFS from, always choose the node with the lowest transaction id.
+  This also means when exploring neighbors, explore them in sorted order from lowest to highest.
+
+  When you find a cycle, you should abort the youngest/newest transaction to break the cycle by setting that
+  transactions state to ABORTED.
+
+  When your detection thread wakes up, it is responsible for breaking all cycles that exist.
+  If you follow the above requirements, you will always find the cycles in a deterministic order.
+  This also means that when you are building your graph, you should not add nodes
+   for aborted transactions or draw edges to aborted transactions.
+
+  Your background cycle detection algorithm may need to get a pointer to a transaction using a txn_id. We have added a
+  static method Transaction* GetTransaction(txn_id_t txn_id) to let you do that.
+
+  You can use std::this_thread::sleep_for to order threads to write test cases. You can also tweak
+  CYCLE_DETECTION_INTERVAL in common/config.h in your test cases.
+  */
+
   /**
    * Adds an edge from t1 -> t2 from waits for graph.
+   * Adds an edge in your graph from t1 to t2. If the edge already exists, you don't have to do anything.
    * @param t1 transaction waiting for a lock
    * @param t2 transaction being waited for
    */
@@ -342,6 +371,7 @@ class LockManager {
 
   /**
    * Removes an edge from t1 -> t2 from waits for graph.
+   * Removes edge t1 to t2 from your graph. If no such edge exists, you don't have to do anything.
    * @param t1 transaction waiting for a lock
    * @param t2 transaction being waited for
    */
@@ -379,8 +409,12 @@ class LockManager {
   std::atomic<bool> enable_cycle_detection_;
   std::thread *cycle_detection_thread_;
   /** Waits-for graph representation. */
+  // t1 <- t2
   std::unordered_map<txn_id_t, std::vector<txn_id_t>> waits_for_;
-  std::mutex waits_for_latch_;
+  std::mutex waits_for_latch_;  //
+
+  std::vector<txn_id_t> waits_;
+  std::unordered_map<txn_id_t, std::variant<table_oid_t, RID>> txn_variant_map_;
 };
 
 }  // namespace bustub

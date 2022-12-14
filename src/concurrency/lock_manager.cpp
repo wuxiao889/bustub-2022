@@ -12,27 +12,21 @@
 
 #include "concurrency/lock_manager.h"
 #include <fmt/printf.h>
+#include <algorithm>
 #include <cassert>
+#include <cstddef>
+#include <functional>
 #include <memory>
 #include <mutex>  // NOLINT
 #include "catalog/column.h"
+#include "catalog/table_generator.h"
 #include "common/config.h"
 #include "common/logger.h"
 #include "concurrency/transaction.h"
 #include "concurrency/transaction_manager.h"
+#include "primer/p0_trie.h"
 
 namespace bustub {
-
-/*
-
-    Compatibility Matrix
-        IS   IX   S   SIX   X
-  IS    √    √    √    √    ×
-  IX    √    √    ×    ×    ×
-  S     √    ×    √    ×    ×
-  SIX   √    ×    ×    ×    ×
-  X     ×    ×    ×    ×    ×
-*/
 
 auto LockModeToString(bustub::LockManager::LockMode lock_mode) -> std::string {
   switch (lock_mode) {
@@ -50,10 +44,28 @@ auto LockModeToString(bustub::LockManager::LockMode lock_mode) -> std::string {
   return "";
 }
 
+/*
+    Compatibility Matrix
+        IS   IX   S   SIX   X
+  IS    √    √    √    √    ×
+  IX    √    √    ×    ×    ×
+  S     √    ×    √    ×    ×
+  SIX   √    ×    ×    ×    ×
+  X     ×    ×    ×    ×    ×
+*/
+
 auto LockManager::LockRequestQueue::CheckRunnable(LockMode lock_mode, ListType::iterator ite) -> bool {
-  // int mask = 0;
   // all earlier requests should have been granted already
   // check compatible with the locks that are currently held
+
+  // 检查链表ite前面request.lock_mode是否和*ite兼容
+  // 不需要关心前面是否granted
+
+  //  [S S S] X S S X X
+  //  [X] S S X X
+  //  [S S] X X
+  //  [X] X
+  //  [X]
   for (auto it = request_queue_.begin(); it != ite; it++) {
     const auto &request = *it;
     const auto mode = request->lock_mode_;
@@ -83,40 +95,7 @@ auto LockManager::LockRequestQueue::CheckRunnable(LockMode lock_mode, ListType::
         return false;
     }
   }
-
   return true;
-
-  // switch (lock_mode) {
-  //   case LockMode::INTENTION_SHARED:
-  //     if ((mask & 1 << static_cast<int>(LockMode::INTENTION_EXCLUSIVE)) == 1) {
-  //       return false;
-  //     }
-  //     break;
-  //   case LockMode::INTENTION_EXCLUSIVE:
-  //     if (((mask & 1 << static_cast<int>(LockMode::SHARED)) == 1) ||
-  //         (mask & 1 << static_cast<int>(LockMode::SHARED_INTENTION_EXCLUSIVE)) == 1 ||
-  //         ((mask & 1 << static_cast<int>(LockMode::EXCLUSIVE)) == 1)) {
-  //       return false;
-  //     }
-  //     break;
-  //   case LockMode::SHARED:
-  //     if (((mask & 1 << static_cast<int>(LockMode::INTENTION_EXCLUSIVE)) == 1) ||
-  //         (mask & 1 << static_cast<int>(LockMode::SHARED_INTENTION_EXCLUSIVE)) == 1 ||
-  //         ((mask & 1 << static_cast<int>(LockMode::EXCLUSIVE)) == 1)) {
-  //       return false;
-  //     }
-  //     break;
-  //   case LockMode::SHARED_INTENTION_EXCLUSIVE:
-  //     if ((mask & ~(1 << static_cast<int>(LockMode::SHARED_INTENTION_EXCLUSIVE))) == 1) {
-  //       return false;
-  //     }
-  //     break;
-  //   case LockMode::EXCLUSIVE:
-  //     if (mask != 0) {
-  //       return false;
-  //     }
-  //     break;
-  // }
 };
 
 auto LockManager::LockTable(Transaction *txn, LockMode lock_mode, const table_oid_t &oid) -> bool {
@@ -160,23 +139,26 @@ auto LockManager::LockTable(Transaction *txn, LockMode lock_mode, const table_oi
   std::shared_ptr<LockRequestQueue> lrque;
   // std::lock_guard lock(table_lock_map_latch_);
   table_lock_map_latch_.lock();
+  auto table_lock_map_it = table_lock_map_.find(oid);
   LOG_DEBUG("\033[0;34m%d: txn %d locktable %d %s\033[0m\n", ::gettid(), txn_id, oid,
             LockModeToString(lock_mode).c_str());
-  auto lock_request = std::make_shared<LockRequest>(txn_id, lock_mode, oid);
-  auto table_lock_map_it = table_lock_map_.find(oid);
 
   bool upgrade = false;
   LockMode old_lock_mode;
 
+  auto lock_request = std::make_shared<LockRequest>(txn_id, lock_mode, oid);
+  // txn_time_map_[lock_request->txn_id_] = lock_request->timestamp_;
+  txn_variant_map_[txn_id] = oid;
   if (table_lock_map_it != table_lock_map_.end()) {
     lrque = table_lock_map_it->second;
-    std::unique_lock lock(lrque->latch_);
     table_lock_map_latch_.unlock();
+    std::unique_lock lock(lrque->latch_);
 
-    decltype(lrque->request_queue_.begin()) request_queue_it;
-    for (request_queue_it = lrque->request_queue_.begin(); request_queue_it != lrque->request_queue_.end();
-         ++request_queue_it) {
-      const auto &request = *request_queue_it;
+    auto &request_queue = lrque->request_queue_;
+    decltype(request_queue.begin()) request_it;
+    // check upgrade
+    for (request_it = request_queue.begin(); request_it != request_queue.end(); ++request_it) {
+      const auto &request = *request_it;
 
       if (!request->granted_) {
         break;
@@ -222,25 +204,34 @@ auto LockManager::LockTable(Transaction *txn, LockMode lock_mode, const table_oi
 
       lrque->upgrading_ = lock_request->txn_id_;
 
-      auto it = request_queue_it;
-      for (; it != lrque->request_queue_.end(); ++it) {
-        const auto &request = *request_queue_it;
+      auto it = request_it;
+      for (; it != request_queue.end(); ++it) {
+        const auto &request = *request_it;
         if (!request->granted_) {
           break;
         }
       }
       // A lock request being upgraded should be
       // prioritised over other waiting lock requests on the same resource.
-      lrque->request_queue_.erase(request_queue_it);
-      request_queue_it = lrque->request_queue_.insert(it, lock_request);
+      request_queue.erase(request_it);
+      request_it = request_queue.insert(it, lock_request);
     } else {
-      request_queue_it = lrque->request_queue_.insert(lrque->request_queue_.end(), lock_request);
+      request_it = request_queue.insert(request_queue.end(), lock_request);
     }
     // void wait( std::unique_lock<std::mutex>& lock, Predicate stop_waiting );
     lrque->cv_.wait(lock, [&]() {
-      auto run = lrque->CheckRunnable(lock_mode, request_queue_it);
-      return run;
+      if (txn->GetState() == TransactionState::ABORTED) {
+        return true;
+      }
+      return lrque->CheckRunnable(lock_mode, request_it);
     });
+
+    if (txn->GetState() == TransactionState::ABORTED) {
+      LOG_DEBUG("\033[0;31m%d: txn %d locktable %d %s abort\033[0m\n", ::gettid(), txn_id, oid,
+                LockModeToString(lock_mode).c_str());
+      request_queue.erase(request_it);
+      return false;
+    }
 
     lock_request->granted_ = true;
     if (upgrade) {
@@ -449,7 +440,6 @@ auto LockManager::LockRow(Transaction *txn, LockMode lock_mode, const table_oid_
     }
   }
 
-  auto lock_request = std::make_shared<LockRequest>(txn_id, lock_mode, oid, rid);
   std::shared_ptr<LockRequestQueue> lrque;
 
   row_lock_map_latch_.lock();
@@ -458,15 +448,18 @@ auto LockManager::LockRow(Transaction *txn, LockMode lock_mode, const table_oid_
   bool upgrade = false;
   LockMode old_lock_mode;
 
+  auto lock_request = std::make_shared<LockRequest>(txn_id, lock_mode, oid, rid);
+  // txn_time_map_[lock_request->txn_id_] = lock_request->timestamp_;
+  txn_variant_map_[txn_id] = rid;
   if (row_lock_map_it != row_lock_map_.end()) {
     lrque = row_lock_map_it->second;
-    std::unique_lock lock(lrque->latch_);
     row_lock_map_latch_.unlock();
+    std::unique_lock lock(lrque->latch_);
 
     auto &request_queue = lrque->request_queue_;
-    decltype(request_queue.begin()) que_it;
-    for (que_it = request_queue.begin(); que_it != request_queue.end(); ++que_it) {
-      const auto &request = *que_it;
+    decltype(request_queue.begin()) request_it;
+    for (request_it = request_queue.begin(); request_it != request_queue.end(); ++request_it) {
+      const auto &request = *request_it;
       if (!request->granted_) {
         break;
       }
@@ -491,7 +484,7 @@ auto LockManager::LockRow(Transaction *txn, LockMode lock_mode, const table_oid_
 
       lrque->upgrading_ = lock_request->txn_id_;
 
-      auto it = que_it;
+      auto it = request_it;
       for (; it != request_queue.end(); ++it) {
         const auto &request = *it;
         if (!request->granted_) {
@@ -499,12 +492,26 @@ auto LockManager::LockRow(Transaction *txn, LockMode lock_mode, const table_oid_
         }
       }
 
-      request_queue.erase(que_it);
-      que_it = request_queue.insert(it, lock_request);
+      request_queue.erase(request_it);
+      request_it = request_queue.insert(it, lock_request);
     } else {
-      que_it = request_queue.insert(request_queue.end(), lock_request);
+      request_it = request_queue.insert(request_queue.end(), lock_request);
     }
-    lrque->cv_.wait(lock, [&]() { return lrque->CheckRunnable(lock_mode, que_it); });
+
+    lrque->cv_.wait(lock, [&]() {
+      if (txn->GetState() == TransactionState::ABORTED) {
+        return true;
+      }
+      return lrque->CheckRunnable(lock_mode, request_it);
+    });
+
+    if (txn->GetState() == TransactionState::ABORTED) {
+      LOG_DEBUG("\033[0;31m%d: txn %d table %d lockrow [%d,%d] %s abort\033[0m\n", ::gettid(), txn_id, oid,
+                rid.GetPageId(), rid.GetSlotNum(), LockModeToString(lock_mode).c_str());
+      request_queue.erase(request_it);
+      return false;
+    }
+
     lock_request->granted_ = true;
     if (upgrade) {
       lrque->upgrading_ = INVALID_TXN_ID;
@@ -595,27 +602,157 @@ auto LockManager::UnlockRow(Transaction *txn, const table_oid_t &oid, const RID 
     txn->GetExclusiveLockSet()->erase(rid);
     lock_set = txn->GetExclusiveRowLockSet();
   }
-
   lock_set->at(oid).erase(rid);
 
   return true;
 }
 
-void LockManager::AddEdge(txn_id_t t1, txn_id_t t2) {}
+// t1 wait for t2
+void LockManager::AddEdge(txn_id_t t1, txn_id_t t2) {
+  auto &vec = waits_for_[t2];
+  auto it = std::find(vec.begin(), vec.end(), t1);
+  if (it == vec.end()) {
+    // LOG_DEBUG("add edge %d -> %d\n", t1, t2);
+    vec.push_back(t1);
+  }
+}
 
-void LockManager::RemoveEdge(txn_id_t t1, txn_id_t t2) {}
-
-auto LockManager::HasCycle(txn_id_t *txn_id) -> bool { return false; }
+void LockManager::RemoveEdge(txn_id_t t1, txn_id_t t2) {
+  auto &vec = waits_for_[t2];
+  auto it = std::find(vec.begin(), vec.end(), t1);
+  if (it != vec.end()) {
+    // LOG_DEBUG("remove edge %d -> %d\n", t1, t2);
+    vec.erase(it);
+  }
+}
 
 auto LockManager::GetEdgeList() -> std::vector<std::pair<txn_id_t, txn_id_t>> {
   std::vector<std::pair<txn_id_t, txn_id_t>> edges(0);
+  for (auto &[t2, vec] : waits_for_) {
+    for (auto t1 : vec) {
+      edges.emplace_back(t1, t2);
+    }
+  }
   return edges;
+}
+
+auto LockManager::HasCycle(txn_id_t *txn_id) -> bool {
+  if (waits_.empty()) {
+    return false;
+  }
+
+  std::unordered_set<txn_id_t> visted;
+
+  std::function<bool(txn_id_t)> helper = [&](txn_id_t tid) -> bool {
+    auto it = waits_for_.find(tid);
+    if (it == waits_for_.end()) {
+      return false;
+    }
+    const auto &waits_for = waits_for_[tid];
+
+    for (const auto &waits_for_txn_id : waits_for) {
+      if (visted.count(waits_for_txn_id) == 1) {
+        *txn_id = waits_for_txn_id;
+        for (const auto &visted_txn_id : visted) {
+          *txn_id = std::max(*txn_id, visted_txn_id);
+        }
+        return true;
+      }
+
+      visted.insert(waits_for_txn_id);
+      if (helper(waits_for_txn_id)) {
+        return true;
+      }
+      visted.erase(waits_for_txn_id);
+    }
+    return false;
+  };
+
+  return helper(waits_.front());
 }
 
 void LockManager::RunCycleDetection() {
   while (enable_cycle_detection_) {
     std::this_thread::sleep_for(cycle_detection_interval);
-    {  // TODO(students): detect deadlock
+    {
+      std::lock_guard lock(waits_for_latch_);
+      table_lock_map_latch_.lock();
+      row_lock_map_latch_.lock();
+      LOG_DEBUG("\033[0;41m RunCycleDetection\033[0m\n");
+
+      auto add_edges = [&](const auto &map) {
+        for (const auto &[_, que] : map) {
+          std::lock_guard lock(que->latch_);
+          std::vector<txn_id_t> granted;
+          std::vector<txn_id_t> waited;
+          for (const auto &lock_request : que->request_queue_) {
+            if (lock_request->granted_) {
+              granted.push_back(lock_request->txn_id_);
+            } else {
+              waited.push_back(lock_request->txn_id_);
+            }
+          }
+          for (auto t2 : granted) {
+            for (auto t1 : waited) {
+              AddEdge(t1, t2);
+            }
+          }
+        }
+      };
+
+      add_edges(table_lock_map_);
+      add_edges(row_lock_map_);
+
+      // This means when choosing which unexplored node to run DFS from, always choose the node with the lowest
+      // transaction id.
+      // This also means when exploring neighbors, explore them in sorted order from lowest to highest.
+      waits_.reserve(waits_for_.size());
+      for (auto &[t, vec] : waits_for_) {
+        std::sort(vec.begin(), vec.end());
+        waits_.push_back(t);
+      }
+      std::sort(waits_.begin(), waits_.end());
+
+      auto remove_edges = [&](const auto &que, const auto &t1) {
+        std::vector<txn_id_t> granted;
+        for (const auto &lock_request : que->request_queue_) {
+          if (!lock_request->granted_) {
+            break;
+          }
+          granted.push_back(lock_request->txn_id_);
+        }
+        for (auto t2 : granted) {
+          RemoveEdge(t1, t2);
+        }
+      };
+
+      txn_id_t txn_id = INVALID_TXN_ID;
+
+      while (HasCycle(&txn_id)) {
+        auto txn = TransactionManager::GetTransaction(txn_id);
+        txn->SetState(TransactionState::ABORTED);
+
+        if (auto *p = std::get_if<table_oid_t>(&txn_variant_map_[txn_id])) {
+          table_oid_t tid = *p;
+          // LOG_DEBUG("\033[0;31m abort txn %d waits for table %d\033[0m;\n", txn_id, tid);
+          auto &lock_request_que = table_lock_map_[tid];
+          remove_edges(lock_request_que, txn_id);
+          lock_request_que->cv_.notify_all();
+        } else {
+          RID rid = std::get<RID>(txn_variant_map_[txn_id]);
+          // LOG_DEBUG("\033[0;31m abort txn %d waits for tuple [%d,%d]\033[0m;\n", txn_id, rid.GetPageId(),
+          // rid.GetSlotNum());
+          auto &lock_request_que = row_lock_map_[rid];
+          remove_edges(lock_request_que, txn_id);
+          lock_request_que->cv_.notify_all();
+        }
+      }
+
+      row_lock_map_latch_.unlock();
+      table_lock_map_latch_.unlock();
+
+      waits_.clear();
+      waits_for_.clear();
     }
   }
 }
