@@ -61,16 +61,67 @@ class LockManager {
     bool granted_{false};
   };
 
+  /*
+      We can avoid starvation of transactions by granting locks in the following manner:
+    When a transaction Ti requests a lock on a data item Q in a particular mode M, the
+    concurrency-control manager grants the lock provided that:
+
+        • There is no other transaction holding a lock on Q in a mode that conflicts with M.
+        • There is no other transaction that is waiting for a lock on Q and that made its lock
+        request before Ti.
+
+      Note that a transaction attempting to upgrade a lock on an item Q may be forced
+    to wait. This enforced wait occurs if Q is currently locked by another transaction in
+    shared mode.
+
+
+      A simple but widely used scheme automatically generates the appropriate lock and
+    unlock instructions for a transaction, on the basis of read and write requests from the
+    transaction:
+      • When a transaction Ti issues a read(Q) operation, the system issues a lock-S(Q)
+      instruction followed by the read(Q) instruction.
+      • When Ti issues a write(Q) operation, the system checks to see whether Ti already
+      holds a shared lock on Q. If it does, then the system issues an upgrade(Q) in-
+      struction, followed by the write(Q) instruction. Otherwise, the system issues a
+      lock-X(Q) instruction, followed by the write(Q) instruction.
+      • All locks obtained by a transaction are unlocked after that transaction commits or
+      aborts.
+
+
+    1. When a lock request message arrives, it adds a record to the end of the linked list
+      for the data item, if the linked list is present. Otherwise it creates a new linked list,
+      containing only the record for the request.
+
+    2. It always grants a lock request on a data item that is not currently locked. But
+      if the transaction requests a lock on an item on which a lock is currently held,
+      the lock manager grants the request only if it is compatible with the locks that are
+      currently held, and all earlier requests have been granted already. Otherwise the
+      request has to wait.
+
+    3. When the lock manager receives an unlock message from a transaction, it deletes
+      the record for that data item in the linked list corresponding to that transaction. It
+      tests the record that follows, if any, as described in the previous paragraph, to see
+      if that request can now be granted. If it can, the lock manager grants that request
+      and processes the record following it, if any, similarly, and so on.
+
+    4. If a transaction aborts, the lock manager deletes any waiting request made by the
+      transaction. Once the database system has taken appropriate actions to undo the
+      transaction (see Section 19.3), it releases all locks held by the aborted transaction.
+  */
+
   class LockRequestQueue {
    public:
+    using ListType = std::list<std::shared_ptr<LockRequest>>;
     /** List of lock requests for the same resource (table or row) */
-    std::list<LockRequest *> request_queue_;
+    ListType request_queue_;
     /** For notifying blocked transactions on this rid */
     std::condition_variable cv_;
     /** txn_id of an upgrading transaction (if any) */
     txn_id_t upgrading_ = INVALID_TXN_ID;
     /** coordination */
     std::mutex latch_;
+
+    auto CheckRunnable(LockMode lock_mode, ListType::iterator ite) -> bool;
   };
 
   /**
@@ -87,6 +138,22 @@ class LockManager {
     delete cycle_detection_thread_;
   }
 
+  /*
+   The multiple-granularity locking protocol uses these lock modes to ensure serializ-
+     ability. It requires that a transaction Ti that attempts to lock a node Q must follow these
+     rules:
+     • Transaction Ti must observe the lock-compatibility function of Figure 18.16.
+     • Transaction Ti must lock the root of the tree first and can lock it in any mode.
+     • Transaction Ti can lock a node Q in S or IS mode only if Ti currently has the parent
+     of Q locked in either IX or IS mode.
+     • Transaction Ti can lock a node Q in X, SIX, or IX mode only if Ti currently has the
+     parent of Q locked in either IX or SIX mode.
+     • Transaction Ti can lock a node only if Ti has not previously unlocked any node
+     (i.e., Ti is two phase).
+     • Transaction Ti can unlock a node Q only if Ti currently has none of the children
+     of Q locked.
+  */
+
   /**
    * [LOCK_NOTE]
    *
@@ -95,12 +162,12 @@ class LockManager {
    *    If the transaction was aborted in the meantime, do not grant the lock and return false.
    *
    *
-   * MULTIPLE TRANSACTIONS:
+   * MULTIPLE TRANSACTIONS: 只要遵守FIFO，所有兼容的请求应该同时授予
    *    LockManager should maintain a queue for each resource; locks should be granted to transactions in a FIFO manner.
    *    If there are multiple compatible lock requests, all should be granted at the same time
    *    as long as FIFO is honoured.
    *
-   * SUPPORTED LOCK MODES:
+   * SUPPORTED LOCK MODES: 行不能有意向锁
    *    Table locking should support all lock modes.
    *    Row locking should not support Intention locks. Attempting this should set the TransactionState as
    *    ABORTED and throw a TransactionAbortException (ATTEMPTED_INTENTION_LOCK_ON_ROW)
@@ -117,23 +184,23 @@ class LockManager {
    *    Similarly, X/IX locks on rows are not allowed if the the Transaction State is SHRINKING, and any such attempt
    *    should set the TransactionState as ABORTED and throw a TransactionAbortException (LOCK_ON_SHRINKING).
    *
-   *    REPEATABLE_READ:
+   *    REPEATABLE_READ: phantoms may happen
    *        The transaction is required to take all locks.
    *        All locks are allowed in the GROWING state
    *        No locks are allowed in the SHRINKING state
    *
-   *    READ_COMMITTED:
+   *    READ_COMMITTED: phantoms, unrepeatable-read
    *        The transaction is required to take all locks.
    *        All locks are allowed in the GROWING state
    *        Only IS, S locks are allowed in the SHRINKING state
    *
-   *    READ_UNCOMMITTED:
+   *    READ_UNCOMMITTED: phantoms, unrepeatable reads, dirty reads
    *        The transaction is required to take only IX, X locks.
    *        X, IX locks are allowed in the GROWING state.
    *        S, IS, SIX locks are never allowed
    *
    *
-   * MULTILEVEL LOCKING:
+   * MULTILEVEL LOCKING: 行锁与表锁要对应
    *    While locking rows, Lock() should ensure that the transaction has an appropriate lock on the table which the row
    *    belongs to. For instance, if an exclusive lock is attempted on a row, the transaction must hold either
    *    X, IX, or SIX on the table. If such a lock does not exist on the table, Lock() should set the TransactionState
@@ -190,10 +257,10 @@ class LockManager {
    *
    *    READ_COMMITTED:
    *        Unlocking X locks should set the transaction state to SHRINKING.
-   *        Unlocking S locks does not affect transaction state.
+   *        Unlocking S locks does not affect transaction state. (unrepeatable read)
    *
    *   READ_UNCOMMITTED:
-   *        Unlocking X locks should set the transaction state to SHRINKING.
+   *        Unlocking X locks should set the transaction state to SHRINKING. (dirty read)
    *        S locks are not permitted under READ_UNCOMMITTED.
    *            The behaviour upon unlocking an S lock under this isolation level is undefined.
    *

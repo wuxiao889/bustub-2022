@@ -49,6 +49,18 @@ enum class TransactionState { GROWING, SHRINKING, COMMITTED, ABORTED };
  */
 enum class IsolationLevel { READ_UNCOMMITTED, REPEATABLE_READ, READ_COMMITTED };
 
+/*
+  IsolationLevel controls the extent that a txn is exposed to the actions of other concurrent txns.
+  Provides for greater concurrency at the cost of exposing txns to uncommitted changes:
+  -> Dirty Reads
+  -> Unrepeatable Reads
+  -> Phantom Reads
+
+  REPEATABLE_READ Obtain all locks first, plus strict 2PL.
+  READ_COMMITTED  Same as above, but S locks are released immediately.
+  READ_UNCOMMITTED  Same as above but allows dirty reads (no S locks).
+*/
+
 /**
  * Type of write operation.
  */
