@@ -90,7 +90,10 @@ class Optimizer {
    */
   auto OptimizeFilter(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef;
 
+  // TODO(wxx)
   auto OptimizePickIndex(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef;
+
+  auto OptimizeSeqScanAsIndexScan(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef;
 
   //   auto OptimizePick
   /**

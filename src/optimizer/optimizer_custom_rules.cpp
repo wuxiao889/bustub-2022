@@ -22,6 +22,7 @@
 #include "execution/plans/aggregation_plan.h"
 #include "execution/plans/filter_plan.h"
 #include "execution/plans/hash_join_plan.h"
+#include "execution/plans/index_scan_plan.h"
 #include "execution/plans/limit_plan.h"
 #include "execution/plans/mock_scan_plan.h"
 #include "execution/plans/nested_loop_join_plan.h"
@@ -65,6 +66,8 @@ auto Optimizer::OptimizeCustom(const AbstractPlanNodeRef &plan) -> AbstractPlanN
   // fmt::print("OptimizePredictPushDown(p)\n{}\n\n", *p);
   p = OptimizeMergeFilterScan(p);
   // fmt::print("OptimizeMergeFilterScan(p)\n{}\n\n", *p);
+  p = OptimizeSeqScanAsIndexScan(p);
+  // fmt::print("OptimizeSeqScanAsIndexScan(p)\n{}\n\n", *p);
   p = OptimizeNLJAsIndexJoin(p);
   p = OptimizeNLJAsHashJoin(p);
 
@@ -524,6 +527,50 @@ auto Optimizer::EstimatePlan(const AbstractPlanNodeRef &plan) -> std::optional<s
       break;
   }
   return plan_size;
+}
+
+auto Optimizer::OptimizeSeqScanAsIndexScan(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef {
+  std::vector<AbstractPlanNodeRef> children;
+  for (const auto &child : plan->GetChildren()) {
+    children.emplace_back(OptimizeSeqScanAsIndexScan(child));
+  }
+  auto optimized_plan = plan->CloneWithChildren(std::move(children));
+
+  if (optimized_plan->GetType() == PlanType::SeqScan) {
+    const auto &seq_plan = static_cast<const SeqScanPlanNode &>(*optimized_plan);
+    if (seq_plan.filter_predicate_ != nullptr) {
+      if (const auto *cmp_expr = dynamic_cast<const ComparisonExpression *>(seq_plan.filter_predicate_.get());
+          cmp_expr != nullptr) {
+        if (const auto *left_expr = dynamic_cast<const ColumnValueExpression *>(cmp_expr->children_[0].get());
+            left_expr != nullptr) {
+          if (const auto *right_expr = dynamic_cast<const ConstantValueExpression *>(cmp_expr->children_[1].get());
+              right_expr != nullptr) {
+            if (auto index = MatchIndex(seq_plan.table_name_, left_expr->GetColIdx()); index != std::nullopt) {
+              assert(index);
+              auto [index_oid, index_name] = *index;
+              return std::make_shared<IndexScanPlanNode>(seq_plan.output_schema_, index_oid,
+                                                         seq_plan.filter_predicate_);
+            }
+          }
+        }
+
+        if (const auto *left_expr = dynamic_cast<const ConstantValueExpression *>(cmp_expr->children_[0].get());
+            left_expr != nullptr) {
+          if (const auto *right_expr = dynamic_cast<const ColumnValueExpression *>(cmp_expr->children_[1].get());
+              right_expr != nullptr) {
+            if (auto index = MatchIndex(seq_plan.table_name_, right_expr->GetColIdx()); index != std::nullopt) {
+              assert(index);
+              auto [index_oid, index_name] = *index;
+              auto new_cmp_expr = std::make_shared<ComparisonExpression>(cmp_expr->GetChildAt(1),
+                                                                         cmp_expr->GetChildAt(0), cmp_expr->comp_type_);
+              return std::make_shared<IndexScanPlanNode>(seq_plan.output_schema_, index_oid, std::move(new_cmp_expr));
+            }
+          }
+        }
+      }
+    }
+  }
+  return optimized_plan;
 }
 
 auto Optimizer::BuildExprTree(const std::vector<AbstractExpressionRef> &exprs) -> AbstractExpressionRef {

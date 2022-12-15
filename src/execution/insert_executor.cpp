@@ -48,6 +48,7 @@ auto InsertExecutor::Next(Tuple *tuple, RID *rid) -> bool {
       for (auto index_info : index_infos) {
         auto new_key = child_tuple.KeyFromTuple(table_info->schema_, *index_info->index_->GetKeySchema(),
                                                 index_info->index_->GetKeyAttrs());
+        // fmt::print("key {}\n", new_key.ToString(&index_info->key_schema_));
         index_info->index_->InsertEntry(new_key, *rid, txn);
       }
     }

@@ -463,7 +463,6 @@ auto LockManager::LockRow(Transaction *txn, LockMode lock_mode, const table_oid_
     }
   }
 
-
   row_lock_map_latch_.lock();
   auto row_lock_map_it = row_lock_map_.find(rid);
 
@@ -519,7 +518,7 @@ auto LockManager::LockRow(Transaction *txn, LockMode lock_mode, const table_oid_
     } else {
       request_it = request_queue.insert(request_queue.end(), lock_request);
     }
-    
+
     lrque->cv_.wait(lock, [&]() {
       return txn->GetState() == TransactionState::ABORTED || lrque->CheckCompatibility(lock_mode, request_it);
     });
@@ -705,7 +704,7 @@ void LockManager::RunCycleDetection() {
       std::lock_guard lock(waits_for_latch_);
       table_lock_map_latch_.lock();
       row_lock_map_latch_.lock();
-      LOG_DEBUG("\033[0;31m RunCycleDetection\033[0m\n");
+      // LOG_DEBUG("\033[0;31m RunCycleDetection\033[0m\n");
 
       auto add_edges = [&](const auto &map) {
         for (const auto &[_, que] : map) {
@@ -777,7 +776,7 @@ void LockManager::RunCycleDetection() {
 
       waits_.clear();
       waits_for_.clear();
-      LOG_DEBUG("\033[0;31m CycleDetection finish\033[0m\n");
+      // LOG_DEBUG("\033[0;31m CycleDetection finish\033[0m\n");
     }
   }
 }
