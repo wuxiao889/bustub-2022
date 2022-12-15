@@ -123,7 +123,7 @@ class LockManager {
     /** coordination */
     std::mutex latch_;
 
-    auto CheckRunnable(LockMode lock_mode, ListType::iterator ite) -> bool;
+    auto CheckCompatibility(LockMode lock_mode, ListType::iterator ite) -> bool;
   };
 
   /**
@@ -254,15 +254,15 @@ class LockManager {
    *    Unlock should update the transaction state appropriately (depending upon the ISOLATION LEVEL)
    *    Only unlocking S or X locks changes transaction state.
    *
-   *    REPEATABLE_READ:
+   *    REPEATABLE_READ: repeatable reads，no dirty reads
    *        Unlocking S/X locks should set the transaction state to SHRINKING
    *
    *    READ_COMMITTED:
    *        Unlocking X locks should set the transaction state to SHRINKING.
    *        Unlocking S locks does not affect transaction state. (unrepeatable read)
    *
-   *   READ_UNCOMMITTED:
-   *        Unlocking X locks should set the transaction state to SHRINKING. (dirty read)
+   *   READ_UNCOMMITTED: (dirty read)
+   *        Unlocking X locks should set the transaction state to SHRINKING.
    *        S locks are not permitted under READ_UNCOMMITTED.
    *            The behaviour upon unlocking an S lock under this isolation level is undefined.
    *
