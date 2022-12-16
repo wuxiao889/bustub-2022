@@ -25,22 +25,7 @@ DeleteExecutor::DeleteExecutor(ExecutorContext *exec_ctx, const DeletePlanNode *
 
 void DeleteExecutor::Init() {
   child_executor_->Init();
-  const auto &lock_mgr = exec_ctx_->GetLockManager();
-  const auto &txn = exec_ctx_->GetTransaction();
-  const auto oid = plan_->table_oid_;
-  try {
-    bool res = true;
-    if (txn->GetIsolationLevel() != IsolationLevel::READ_UNCOMMITTED) {
-      res = lock_mgr->LockTable(exec_ctx_->GetTransaction(), LockManager::LockMode::SHARED_INTENTION_EXCLUSIVE, oid);
-    }
-    if (!res) {
-      assert(txn->GetState() == TransactionState::ABORTED);
-      throw ExecutionException("DeleteExecutor::Init() lock fail");
-    }
-  } catch (TransactionAbortException &e) {
-    assert(txn->GetState() == TransactionState::ABORTED);
-    throw ExecutionException("DeleteExecutor::Init() lock fail");
-  }
+  LockTable();
 }
 
 auto DeleteExecutor::Next(Tuple *tuple, RID *rid) -> bool {
@@ -50,22 +35,15 @@ auto DeleteExecutor::Next(Tuple *tuple, RID *rid) -> bool {
   deleted_ = true;
 
   Tuple child_tuple{};
-  const auto &ctx = GetExecutorContext();
-  const auto &txn = ctx->GetTransaction();
-  const auto &lock_mgr = exec_ctx_->GetLockManager();
+  const auto &txn = exec_ctx_->GetTransaction();
+  // const auto &lock_mgr = exec_ctx_->GetLockManager();
   const auto oid = plan_->table_oid_;
-  const auto &table_info = ctx->GetCatalog()->GetTable(oid);
+  const auto &table_info = exec_ctx_->GetCatalog()->GetTable(oid);
 
   int cnt = 0;
 
   while (child_executor_->Next(&child_tuple, rid)) {
-    bool res = true;
-    res = lock_mgr->LockRow(txn, LockManager::LockMode::EXCLUSIVE, oid, *rid);
-    if (!res) {
-      txn->SetState(TransactionState::ABORTED);
-      throw ExecutionException("InsertExecutor::Next() lock fail");
-    }
-
+    LockRow(*rid);
     auto status = table_info->table_->MarkDelete(*rid, txn);
 
     if (status) {
@@ -86,11 +64,40 @@ auto DeleteExecutor::Next(Tuple *tuple, RID *rid) -> bool {
   return true;
 }
 
+void DeleteExecutor::LockTable() {
+  const auto &lock_mgr = exec_ctx_->GetLockManager();
+  const auto &txn = exec_ctx_->GetTransaction();
+  const auto oid = plan_->table_oid_;
+  try {
+    bool res = true;
+    if (txn->GetIsolationLevel() != IsolationLevel::READ_UNCOMMITTED) {
+      res = lock_mgr->LockTable(exec_ctx_->GetTransaction(), LockManager::LockMode::SHARED_INTENTION_EXCLUSIVE, oid);
+    }
+    if (!res) {
+      assert(txn->GetState() == TransactionState::ABORTED);
+      throw ExecutionException("DeleteExecutor::Init() lock fail");
+    }
+  } catch (TransactionAbortException &e) {
+    assert(txn->GetState() == TransactionState::ABORTED);
+    throw ExecutionException("DeleteExecutor::Init() lock fail");
+  }
+}
+
+void DeleteExecutor::LockRow(const RID &rid) {
+  const auto &txn = exec_ctx_->GetTransaction();
+  const auto &lock_mgr = exec_ctx_->GetLockManager();
+  const auto oid = plan_->table_oid_;
+  bool res = true;
+  res = lock_mgr->LockRow(txn, LockManager::LockMode::EXCLUSIVE, oid, rid);
+  if (!res) {
+    txn->SetState(TransactionState::ABORTED);
+    throw ExecutionException("InsertExecutor::Next() lock fail");
+  }
+}
+
 }  // namespace bustub
 
 /*
-
 Hint: You only need to get a RID from the child executor and call TableHeap::MarkDelete() to effectively delete the
 tuple. All deletes will be applied upon transaction commit.
-
 */

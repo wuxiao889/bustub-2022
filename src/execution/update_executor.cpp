@@ -32,6 +32,38 @@ UpdateExecutor::UpdateExecutor(ExecutorContext *exec_ctx, const UpdatePlanNode *
 
 void UpdateExecutor::Init() {
   child_executor_->Init();
+  LockTable();
+}
+
+auto UpdateExecutor::Next(Tuple *tuple, RID *rid) -> bool {
+  if (updated_) {
+    return false;
+  }
+  updated_ = true;
+
+  size_t cnt = 0;
+  Tuple child_tuple;
+
+  const auto &schema = child_executor_->GetOutputSchema();
+  while (child_executor_->Next(&child_tuple, rid)) {
+    LockRow(*rid);
+    std::vector<Value> values;
+    values.reserve(plan_->target_expressions_.size());
+    // fmt::print("tuple {}\n", child_tuple.ToString(&schema));
+    for (const auto &expr : plan_->target_expressions_) {
+      values.push_back(expr->Evaluate(&child_tuple, schema));
+    }
+    Tuple new_tuple(std::move(values), &schema);
+    // fmt::print("new tuple {}\n", new_tuple.ToString(&schema));
+    bool updated = table_info_->table_->UpdateTuple(new_tuple, *rid, exec_ctx_->GetTransaction());
+    cnt += updated ? 1 : 0;
+  }
+
+  *tuple = Tuple{{ValueFactory::GetIntegerValue(cnt)}, &GetOutputSchema()};
+  return true;
+}
+
+void UpdateExecutor::LockTable() {
   const auto &lock_mgr = exec_ctx_->GetLockManager();
   const auto &txn = exec_ctx_->GetTransaction();
   const auto oid = plan_->table_oid_;
@@ -51,43 +83,18 @@ void UpdateExecutor::Init() {
   }
 }
 
-auto UpdateExecutor::Next(Tuple *tuple, RID *rid) -> bool {
-  if (updated_) {
-    return false;
-  }
-  updated_ = true;
-
-  size_t cnt = 0;
-  Tuple child_tuple;
+void UpdateExecutor::LockRow(const RID &rid) {
   const auto &txn = exec_ctx_->GetTransaction();
   const auto &lock_mgr = exec_ctx_->GetLockManager();
   const auto oid = plan_->table_oid_;
-
-  const auto &schema = child_executor_->GetOutputSchema();
-  while (child_executor_->Next(&child_tuple, rid)) {
-    bool res = true;
-    if (txn->GetIsolationLevel() != IsolationLevel::READ_UNCOMMITTED) {
-      res = lock_mgr->LockRow(txn, LockManager::LockMode::EXCLUSIVE, oid, *rid);
-    }
-    if (!res) {
-      txn->SetState(TransactionState::ABORTED);
-      throw ExecutionException("InsertExecutor::Next() lock fail");
-    }
-
-    std::vector<Value> values;
-    values.reserve(plan_->target_expressions_.size());
-    // fmt::print("tuple {}\n", child_tuple.ToString(&schema));
-    for (const auto &expr : plan_->target_expressions_) {
-      values.push_back(expr->Evaluate(&child_tuple, schema));
-    }
-    Tuple new_tuple(std::move(values), &schema);
-    // fmt::print("new tuple {}\n", new_tuple.ToString(&schema));
-    bool updated = table_info_->table_->UpdateTuple(new_tuple, *rid, exec_ctx_->GetTransaction());
-    cnt += updated ? 1 : 0;
+  bool res = true;
+  if (txn->GetIsolationLevel() != IsolationLevel::READ_UNCOMMITTED) {
+    res = lock_mgr->LockRow(txn, LockManager::LockMode::EXCLUSIVE, oid, rid);
   }
-
-  *tuple = Tuple{{ValueFactory::GetIntegerValue(cnt)}, &GetOutputSchema()};
-  return true;
+  if (!res) {
+    txn->SetState(TransactionState::ABORTED);
+    throw ExecutionException("InsertExecutor::Next() lock fail");
+  }
 }
 
 }  // namespace bustub

@@ -27,10 +27,57 @@ SeqScanExecutor::SeqScanExecutor(ExecutorContext *exec_ctx, const SeqScanPlanNod
 
 void SeqScanExecutor::Init() {
   const auto &txn = exec_ctx_->GetTransaction();
-  const auto &lock_mgr = exec_ctx_->GetLockManager();
-  const auto oid = plan_->table_oid_;
   cur_ = table_info_->table_->Begin(txn);
   cur_page_id_ = INVALID_PAGE_ID;
+  LockTable();
+}
+
+auto SeqScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
+  auto end = table_info_->table_->End();
+  const auto &bpm = exec_ctx_->GetBufferPoolManager();
+
+  while (cur_ != end) {
+    // TODO(wxx) optimize lurk
+    // lruk实现有问题，
+    const auto page_id = cur_->GetRid().GetPageId();
+    if (page_id != cur_page_id_) {
+      if (cur_page_id_ != INVALID_PAGE_ID) {
+        bpm->UnpinPage(cur_page_id_, false);
+      }
+      cur_page_id_ = page_id;
+      bpm->FetchPage(cur_page_id_);
+    }
+
+    *rid = cur_->GetRid();
+
+    LockRow(*rid);
+    *tuple = *cur_;
+    UnLockRow(*rid);
+
+    cur_++;
+    if (plan_->filter_predicate_ != nullptr) {
+      const auto value = plan_->filter_predicate_->Evaluate(tuple, plan_->OutputSchema());
+      if (value.IsNull() || !value.GetAs<bool>()) {
+        continue;
+      }
+    }
+    // fmt::print("SeqScanExecutor::Next {}\n", tuple->ToString(&plan_->OutputSchema()));
+
+    return true;
+  }
+
+  if (cur_page_id_ != INVALID_PAGE_ID) {
+    bpm->UnpinPage(cur_page_id_, false);
+  }
+
+  UnLockTable();
+  return false;
+}
+
+void SeqScanExecutor::LockTable() {
+  const auto &txn = exec_ctx_->GetTransaction();
+  const auto &lock_mgr = exec_ctx_->GetLockManager();
+  const auto oid = plan_->table_oid_;
   bool res = true;
 
   try {
@@ -49,69 +96,42 @@ void SeqScanExecutor::Init() {
   }
 }
 
-auto SeqScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
-  auto end = table_info_->table_->End();
-  const auto &bpm = exec_ctx_->GetBufferPoolManager();
+void SeqScanExecutor::UnLockTable() {
   const auto &txn = exec_ctx_->GetTransaction();
   const auto &lock_mgr = exec_ctx_->GetLockManager();
   const auto oid = plan_->GetTableOid();
-
-  while (cur_ != end) {
-    // TODO(wxx) optimize lurk
-    // lruk实现有问题，
-    const auto page_id = cur_->GetRid().GetPageId();
-    if (page_id != cur_page_id_) {
-      if (cur_page_id_ != INVALID_PAGE_ID) {
-        bpm->UnpinPage(cur_page_id_, false);
-      }
-      cur_page_id_ = page_id;
-      bpm->FetchPage(cur_page_id_);
-    }
-
-    *rid = cur_->GetRid();
-
-    bool res = true;
-    if (txn->GetIsolationLevel() != IsolationLevel::READ_UNCOMMITTED) {
-      if (!txn->IsRowExclusiveLocked(oid, *rid)) {
-        res = lock_mgr->LockRow(txn, LockManager::LockMode::SHARED, oid, *rid);
-      }
-    }
-    if (!res) {
-      txn->SetState(TransactionState::ABORTED);
-      throw ExecutionException("SeqScanExecutor::Next() lock fail");
-    }
-
-    *tuple = *cur_;
-    cur_++;
-
-    if (txn->GetIsolationLevel() == IsolationLevel::READ_COMMITTED) {
-      if (txn->IsRowSharedLocked(oid, *rid)) {
-        lock_mgr->UnlockRow(txn, oid, *rid);
-      }
-    }
-
-    if (plan_->filter_predicate_ != nullptr) {
-      const auto value = plan_->filter_predicate_->Evaluate(tuple, plan_->OutputSchema());
-      if (value.IsNull() || !value.GetAs<bool>()) {
-        continue;
-      }
-    }
-    // fmt::print("SeqScanExecutor::Next {}\n", tuple->ToString(&plan_->OutputSchema()));
-
-    return true;
-  }
-
-  if (cur_page_id_ != INVALID_PAGE_ID) {
-    bpm->UnpinPage(cur_page_id_, false);
-  }
-
   if (txn->GetIsolationLevel() == IsolationLevel::READ_COMMITTED) {
     if (txn->IsTableSharedLocked(oid)) {
       lock_mgr->UnlockTable(txn, oid);
     }
   }
+}
 
-  return false;
+void SeqScanExecutor::LockRow(const RID &rid) {
+  const auto &txn = exec_ctx_->GetTransaction();
+  const auto &lock_mgr = exec_ctx_->GetLockManager();
+  const auto oid = plan_->GetTableOid();
+  bool res = true;
+  if (txn->GetIsolationLevel() != IsolationLevel::READ_UNCOMMITTED) {
+    if (!txn->IsRowExclusiveLocked(oid, rid)) {
+      res = lock_mgr->LockRow(txn, LockManager::LockMode::SHARED, oid, rid);
+    }
+  }
+  if (!res) {
+    txn->SetState(TransactionState::ABORTED);
+    throw ExecutionException("SeqScanExecutor::Next() lock fail");
+  }
+}
+
+void SeqScanExecutor::UnLockRow(const RID &rid) {
+  const auto &txn = exec_ctx_->GetTransaction();
+  const auto &lock_mgr = exec_ctx_->GetLockManager();
+  const auto oid = plan_->GetTableOid();
+  if (txn->GetIsolationLevel() == IsolationLevel::READ_COMMITTED) {
+    if (txn->IsRowSharedLocked(oid, rid)) {
+      lock_mgr->UnlockRow(txn, oid, rid);
+    }
+  }
 }
 
 }  // namespace bustub

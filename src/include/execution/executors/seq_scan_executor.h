@@ -57,5 +57,10 @@ class SeqScanExecutor : public AbstractExecutor {
   TableInfo *table_info_;
   TableIterator cur_;
   page_id_t cur_page_id_;
+
+  void LockTable();
+  void UnLockTable();
+  void LockRow(const RID &rid);
+  void UnLockRow(const RID &rid);
 };
 }  // namespace bustub

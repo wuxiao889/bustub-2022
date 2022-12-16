@@ -48,18 +48,19 @@ class IndexScanExecutor : public AbstractExecutor {
   */
   auto Next(Tuple *tuple, RID *rid) -> bool override;
 
-  void LockTable(LockManager *lock_mgr, Transaction *txn, table_oid_t oid);
-  void UnLockTable(LockManager *lock_mgr, Transaction *txn, table_oid_t oid);
-  void LockRow(LockManager *lock_mgr, Transaction *txn, table_oid_t oid, const RID &rid);
-  void UnLockRow(LockManager *lock_mgr, Transaction *txn, table_oid_t oid, const RID &rid);
-
  private:
   /** The index scan plan node to be executed. */
   const IndexScanPlanNode *plan_;
   const IndexInfo *index_info_;
   IndexIterator<bustub::GenericKey<4>, bustub::RID, bustub::GenericComparator<4>> cur_;
   bool scaned_;
+
+  void LockTable();
+  void UnLockTable();
+  void LockRow(const RID &rid);
+  void UnLockRow(const RID &rid);
 };
+
 }  // namespace bustub
 
 /*

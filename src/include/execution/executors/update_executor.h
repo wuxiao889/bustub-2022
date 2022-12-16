@@ -66,5 +66,8 @@ class UpdateExecutor : public AbstractExecutor {
   std::unique_ptr<AbstractExecutor> child_executor_;
 
   bool updated_;
+
+  void LockTable();
+  void LockRow(const RID &rid);
 };
 }  // namespace bustub

@@ -32,11 +32,7 @@ IndexScanExecutor::IndexScanExecutor(ExecutorContext *exec_ctx, const IndexScanP
 void IndexScanExecutor::Init() {
   auto *tree = dynamic_cast<BPlusTreeIndexForOneIntegerColumn *>(index_info_->index_.get());
   cur_ = tree->GetBeginIterator();
-
-  const auto &lock_mgr = exec_ctx_->GetLockManager();
-  const auto &txn = exec_ctx_->GetTransaction();
-  const auto oid = exec_ctx_->GetCatalog()->GetTable(index_info_->table_name_)->oid_;
-  LockTable(lock_mgr, txn, oid);
+  LockTable();
 }
 
 auto IndexScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
@@ -48,36 +44,31 @@ auto IndexScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
   assert(tree);
   auto end = tree->GetEndIterator();
   const auto &bpm = exec_ctx_->GetBufferPoolManager();
-  const auto &lock_mgr = exec_ctx_->GetLockManager();
   const auto &txn = exec_ctx_->GetTransaction();
-  const auto oid = exec_ctx_->GetCatalog()->GetTable(index_info_->table_name_)->oid_;
   // auto *ctx = GetExecutorContext();
   // auto *table_info = ctx->GetCatalog()->GetTable(index_info_->table_name_);
 
   TablePage *table_page{};
 
   if (plan_->filter_predicate_ != nullptr) {
+    scaned_ = true;
     const auto *cmp_expr = static_cast<const ComparisonExpression *>(plan_->filter_predicate_.get());
     const auto *const_expr = static_cast<const ConstantValueExpression *>(cmp_expr->GetChildAt(1).get());
     std::vector<RID> result;
     Tuple key{{const_expr->val_}, &index_info_->key_schema_};
     index_info_->index_->ScanKey(key, &result, txn);
-    // 其实只有一个
-    scaned_ = true;
+    // 只有一个
     for (auto result_rid : result) {
-      LockRow(lock_mgr, txn, oid, result_rid);
-
+      LockRow(result_rid);
       table_page = reinterpret_cast<TablePage *>(bpm->FetchPage(result_rid.GetPageId())->GetData());
       table_page->GetTuple(result_rid, tuple, txn, exec_ctx_->GetLockManager());
       *rid = result_rid;
       bpm->UnpinPage(result_rid.GetPageId(), false);
-
-      UnLockRow(lock_mgr, txn, oid, result_rid);
-      UnLockTable(lock_mgr, txn, oid);
+      UnLockRow(result_rid);
+      UnLockTable();
       return true;
     }
-
-    UnLockTable(lock_mgr, txn, oid);
+    UnLockTable();
     return false;
   }
 
@@ -85,22 +76,23 @@ auto IndexScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
     *rid = (*cur_).second;
     ++cur_;
 
-    LockRow(lock_mgr, txn, oid, *rid);
-
+    LockRow(*rid);
     table_page = reinterpret_cast<TablePage *>(bpm->FetchPage(rid->GetPageId())->GetData());
     table_page->GetTuple(*rid, tuple, txn, exec_ctx_->GetLockManager());
     bpm->UnpinPage(rid->GetPageId(), false);
-
-    UnLockRow(lock_mgr, txn, oid, *rid);
+    UnLockRow(*rid);
 
     return true;
   }
 
-  UnLockTable(lock_mgr, txn, oid);
+  UnLockTable();
   return false;
 }
 
-void IndexScanExecutor::LockTable(LockManager *lock_mgr, Transaction *txn, table_oid_t oid) {
+void IndexScanExecutor::LockTable() {
+  const auto &lock_mgr = exec_ctx_->GetLockManager();
+  const auto &txn = exec_ctx_->GetTransaction();
+  const auto oid = exec_ctx_->GetCatalog()->GetTable(index_info_->table_name_)->oid_;
   bool res = true;
   if (!txn->IsTableExclusiveLocked(oid)) {
     if (plan_->filter_predicate_ != nullptr) {
@@ -126,7 +118,10 @@ void IndexScanExecutor::LockTable(LockManager *lock_mgr, Transaction *txn, table
   }
 }
 
-void IndexScanExecutor::UnLockTable(LockManager *lock_mgr, Transaction *txn, table_oid_t oid) {
+void IndexScanExecutor::UnLockTable() {
+  const auto &lock_mgr = exec_ctx_->GetLockManager();
+  const auto &txn = exec_ctx_->GetTransaction();
+  const auto oid = exec_ctx_->GetCatalog()->GetTable(index_info_->table_name_)->oid_;
   if (txn->GetIsolationLevel() == IsolationLevel::READ_COMMITTED) {
     if (txn->IsTableSharedLocked(oid) || txn->IsTableIntentionSharedLocked(oid) ||
         txn->IsTableSharedIntentionExclusiveLocked(oid)) {
@@ -135,7 +130,10 @@ void IndexScanExecutor::UnLockTable(LockManager *lock_mgr, Transaction *txn, tab
   }
 }
 
-void IndexScanExecutor::LockRow(LockManager *lock_mgr, Transaction *txn, table_oid_t oid, const RID &rid) {
+void IndexScanExecutor::LockRow(const RID &rid) {
+  const auto &lock_mgr = exec_ctx_->GetLockManager();
+  const auto &txn = exec_ctx_->GetTransaction();
+  const auto oid = exec_ctx_->GetCatalog()->GetTable(index_info_->table_name_)->oid_;
   bool res = true;
   if (txn->GetIsolationLevel() != IsolationLevel::READ_UNCOMMITTED) {
     if (!txn->IsRowExclusiveLocked(oid, rid)) {
@@ -148,7 +146,10 @@ void IndexScanExecutor::LockRow(LockManager *lock_mgr, Transaction *txn, table_o
   }
 }
 
-void IndexScanExecutor::UnLockRow(LockManager *lock_mgr, Transaction *txn, table_oid_t oid, const RID &rid) {
+void IndexScanExecutor::UnLockRow(const RID &rid) {
+  const auto &lock_mgr = exec_ctx_->GetLockManager();
+  const auto &txn = exec_ctx_->GetTransaction();
+  const auto oid = exec_ctx_->GetCatalog()->GetTable(index_info_->table_name_)->oid_;
   if (txn->GetIsolationLevel() == IsolationLevel::READ_COMMITTED) {
     if (txn->IsRowSharedLocked(oid, rid)) {
       lock_mgr->UnlockRow(txn, oid, rid);

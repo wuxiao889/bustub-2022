@@ -64,6 +64,9 @@ class InsertExecutor : public AbstractExecutor {
   std::unique_ptr<AbstractExecutor> child_executor_;
 
   bool inserted_{};
+
+  void LockTable();
+  void LockRow(const RID &rid);
 };
 
 }  // namespace bustub

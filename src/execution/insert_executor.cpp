@@ -30,6 +30,45 @@ InsertExecutor::InsertExecutor(ExecutorContext *exec_ctx, const InsertPlanNode *
 
 void InsertExecutor::Init() {
   child_executor_->Init();
+  LockTable();
+}
+
+auto InsertExecutor::Next(Tuple *tuple, RID *rid) -> bool {
+  if (inserted_) {
+    return false;
+  }
+  inserted_ = true;
+
+  Tuple child_tuple{};
+  const auto &ctx = GetExecutorContext();
+  const auto &txn = exec_ctx_->GetTransaction();
+  const auto oid = plan_->table_oid_;
+  const auto &table_info = ctx->GetCatalog()->GetTable(oid);
+
+  int cnt = 0;
+
+  while (child_executor_->Next(&child_tuple, rid)) {
+    const auto status = table_info->table_->InsertTuple(child_tuple, rid, txn);
+    LockRow(*rid);
+    if (status) {
+      cnt++;
+      std::vector<IndexInfo *> index_infos = exec_ctx_->GetCatalog()->GetTableIndexes(table_info->name_);
+      for (auto index_info : index_infos) {
+        auto new_key = child_tuple.KeyFromTuple(table_info->schema_, *index_info->index_->GetKeySchema(),
+                                                index_info->index_->GetKeyAttrs());
+        // fmt::print("key {}\n", new_key.ToString(&index_info->key_schema_));
+        index_info->index_->InsertEntry(new_key, *rid, txn);
+        txn->GetIndexWriteSet()->emplace_back(*rid, oid, WType::INSERT, child_tuple, index_info->index_oid_,
+                                              exec_ctx_->GetCatalog());
+      }
+    }
+  }
+
+  *tuple = Tuple{{ValueFactory::GetIntegerValue(cnt)}, &plan_->OutputSchema()};
+  return true;
+}
+
+void InsertExecutor::LockTable() {
   const auto &lock_mgr = exec_ctx_->GetLockManager();
   const auto &txn = exec_ctx_->GetTransaction();
   const auto oid = plan_->table_oid_;
@@ -52,46 +91,16 @@ void InsertExecutor::Init() {
   }
 }
 
-auto InsertExecutor::Next(Tuple *tuple, RID *rid) -> bool {
-  if (inserted_) {
-    return false;
-  }
-  inserted_ = true;
-
-  Tuple child_tuple{};
-  const auto &ctx = GetExecutorContext();
+void InsertExecutor::LockRow(const RID &rid) {
   const auto &txn = exec_ctx_->GetTransaction();
   const auto &lock_mgr = exec_ctx_->GetLockManager();
   const auto oid = plan_->table_oid_;
-  const auto &table_info = ctx->GetCatalog()->GetTable(oid);
-
-  int cnt = 0;
-
-  while (child_executor_->Next(&child_tuple, rid)) {
-    auto status = table_info->table_->InsertTuple(child_tuple, rid, txn);
-    bool res = true;
-    res = lock_mgr->LockRow(txn, LockManager::LockMode::EXCLUSIVE, oid, *rid);
-    if (!res) {
-      txn->SetState(TransactionState::ABORTED);
-      throw ExecutionException("InsertExecutor::Next() lock fail");
-    }
-
-    if (status) {
-      cnt++;
-      std::vector<IndexInfo *> index_infos = exec_ctx_->GetCatalog()->GetTableIndexes(table_info->name_);
-      for (auto index_info : index_infos) {
-        auto new_key = child_tuple.KeyFromTuple(table_info->schema_, *index_info->index_->GetKeySchema(),
-                                                index_info->index_->GetKeyAttrs());
-        // fmt::print("key {}\n", new_key.ToString(&index_info->key_schema_));
-        index_info->index_->InsertEntry(new_key, *rid, txn);
-        txn->GetIndexWriteSet()->emplace_back(*rid, oid, WType::INSERT, child_tuple, index_info->index_oid_,
-                                              exec_ctx_->GetCatalog());
-      }
-    }
+  bool res = true;
+  res = lock_mgr->LockRow(txn, LockManager::LockMode::EXCLUSIVE, oid, rid);
+  if (!res) {
+    txn->SetState(TransactionState::ABORTED);
+    throw ExecutionException("InsertExecutor::Next() lock fail");
   }
-
-  *tuple = Tuple{{ValueFactory::GetIntegerValue(cnt)}, &plan_->OutputSchema()};
-  return true;
 }
 
 }  // namespace bustub
