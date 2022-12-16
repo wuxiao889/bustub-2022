@@ -114,16 +114,22 @@ TEST(LockManagerTest, RepeatableRead) {
     std::stringstream ss;
     auto writer = bustub::SimpleStreamWriter(ss, true);
     auto txn = bustub->txn_manager_->Begin(nullptr, bustub::IsolationLevel::REPEATABLE_READ);
-
+    fmt::print("txn thread t0 {}\n", query);
     bustub->ExecuteSqlTxn(query, writer, txn);
     fmt::print("thread t0 result\n{}\n", ss.str());
+    std::string s1 = ss.str();
 
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    ss.str("");
 
+    fmt::print("txn thread t0 {}\n", query);
     bustub->ExecuteSqlTxn(query, writer, txn);
-    fmt::print("thread t0 result\n{}\n", ss.str());
+    fmt::print("txn thread t0 result\n{}\n", ss.str());
+    std::string s2 = ss.str();
 
+    EXPECT_EQ(s1, s2);
     bustub->txn_manager_->Commit(txn);
+    fmt::print("txn threadt0 commit\n");
     delete txn;
   });
 
@@ -134,11 +140,13 @@ TEST(LockManagerTest, RepeatableRead) {
     auto writer = bustub::SimpleStreamWriter(ss, true);
     auto txn = bustub->txn_manager_->Begin(nullptr, bustub::IsolationLevel::REPEATABLE_READ);
 
+    fmt::print("txn thread t1 {}\n", query);
     bustub->ExecuteSqlTxn(query, writer, txn);
-    bustub->txn_manager_->Commit(txn);
+    fmt::print("txn thread t1 result\n{}\n", ss.str());
 
+    bustub->txn_manager_->Commit(txn);
+    fmt::print("txn thread t1 commit\n");
     delete txn;
-    fmt::print("thread t1 result\n{}\n", ss.str());
   });
 
   t0.join();
@@ -202,17 +210,21 @@ TEST(LockManagerTest, Readcommited) {
     auto writer = bustub::SimpleStreamWriter(ss, true);
 
     auto txn = bustub->txn_manager_->Begin(nullptr, bustub::IsolationLevel::READ_COMMITTED);
-
+    fmt::print("thread t0 {}\n", query);
     bustub->ExecuteSqlTxn(query, writer, txn);
     fmt::print("thread t0 result 0 \n{}\n", ss.str());
-
+    std::string s1 = ss.str();
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
-    ss.str("");
+    ss.str("");  // 清空流， clear是清空标志位
+    fmt::print("txn {}\n", query);
     bustub->ExecuteSqlTxn(query, writer, txn);
     fmt::print("thread t0 result 1 \n{}\n", ss.str());
+    std::string s2 = ss.str();
 
+    EXPECT_NE(s1, s2);
     bustub->txn_manager_->Commit(txn);
+    fmt::print("txn thread t0 commit\n");
     delete txn;
   });
 
@@ -223,15 +235,20 @@ TEST(LockManagerTest, Readcommited) {
     auto writer = bustub::SimpleStreamWriter(ss, true);
     auto txn = bustub->txn_manager_->Begin(nullptr, bustub::IsolationLevel::REPEATABLE_READ);
 
+    fmt::print("txn thread t1 {}\n", query);
     bustub->ExecuteSqlTxn(query, writer, txn);
+    fmt::print("txn thread t1 result\n{}", ss.str());
+
     bustub->txn_manager_->Commit(txn);
-    fmt::print("thread t1 result\n{}", ss.str());
-    fmt::print("commit txn4\n");
+    fmt::print("txn thread t1 commit\n");
     delete txn;
   });
 
   t0.join();
   t1.join();
 }
+
+
+
 
 }  // namespace bustub

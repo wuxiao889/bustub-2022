@@ -37,14 +37,12 @@ void UpdateExecutor::Init() {
   const auto oid = plan_->table_oid_;
 
   try {
-    bool res;
-    if (txn->GetIsolationLevel() == IsolationLevel::READ_UNCOMMITTED) {
-      res = lock_mgr->LockTable(exec_ctx_->GetTransaction(), LockManager::LockMode::EXCLUSIVE, oid);
-    } else {
+    bool res = true;
+    if (txn->GetIsolationLevel() != IsolationLevel::READ_UNCOMMITTED) {
       res = lock_mgr->LockTable(exec_ctx_->GetTransaction(), LockManager::LockMode::SHARED_INTENTION_EXCLUSIVE, oid);
     }
     if (!res) {
-      txn->SetState(TransactionState::ABORTED);
+      assert(txn->GetState() == TransactionState::ABORTED);
       throw ExecutionException("UpdateExecutor::Init() lock fail");
     }
   } catch (TransactionAbortException &e) {
@@ -67,14 +65,13 @@ auto UpdateExecutor::Next(Tuple *tuple, RID *rid) -> bool {
 
   const auto &schema = child_executor_->GetOutputSchema();
   while (child_executor_->Next(&child_tuple, rid)) {
-    try {
-      if (!lock_mgr->LockRow(txn, LockManager::LockMode::EXCLUSIVE, oid, *rid)) {
-        txn->SetState(TransactionState::ABORTED);
-        throw ExecutionException("UpdateExecutor::Next() lock fail");
-      }
-    } catch (TransactionAbortException &e) {
-      assert(txn->GetState() == TransactionState::ABORTED);
-      throw ExecutionException("UpdateExecutor::Next() lock fail");
+    bool res = true;
+    if (txn->GetIsolationLevel() != IsolationLevel::READ_UNCOMMITTED) {
+      res = lock_mgr->LockRow(txn, LockManager::LockMode::EXCLUSIVE, oid, *rid);
+    }
+    if (!res) {
+      txn->SetState(TransactionState::ABORTED);
+      throw ExecutionException("InsertExecutor::Next() lock fail");
     }
 
     std::vector<Value> values;
@@ -85,8 +82,8 @@ auto UpdateExecutor::Next(Tuple *tuple, RID *rid) -> bool {
     }
     Tuple new_tuple(std::move(values), &schema);
     // fmt::print("new tuple {}\n", new_tuple.ToString(&schema));
-    bool res = table_info_->table_->UpdateTuple(new_tuple, *rid, exec_ctx_->GetTransaction());
-    cnt += res ? 1 : 0;
+    bool updated = table_info_->table_->UpdateTuple(new_tuple, *rid, exec_ctx_->GetTransaction());
+    cnt += updated ? 1 : 0;
   }
 
   *tuple = Tuple{{ValueFactory::GetIntegerValue(cnt)}, &GetOutputSchema()};

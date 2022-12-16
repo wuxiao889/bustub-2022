@@ -28,14 +28,17 @@ void DeleteExecutor::Init() {
   const auto &lock_mgr = exec_ctx_->GetLockManager();
   const auto &txn = exec_ctx_->GetTransaction();
   const auto oid = plan_->table_oid_;
-  bool res;
-  if (txn->GetIsolationLevel() == IsolationLevel::READ_UNCOMMITTED) {
-    res = lock_mgr->LockTable(exec_ctx_->GetTransaction(), LockManager::LockMode::EXCLUSIVE, oid);
-  } else {
-    res = lock_mgr->LockTable(exec_ctx_->GetTransaction(), LockManager::LockMode::SHARED_INTENTION_EXCLUSIVE, oid);
-  }
-  if (!res) {
-    txn->SetState(TransactionState::ABORTED);
+  try {
+    bool res = true;
+    if (txn->GetIsolationLevel() != IsolationLevel::READ_UNCOMMITTED) {
+      res = lock_mgr->LockTable(exec_ctx_->GetTransaction(), LockManager::LockMode::SHARED_INTENTION_EXCLUSIVE, oid);
+    }
+    if (!res) {
+      assert(txn->GetState() == TransactionState::ABORTED);
+      throw ExecutionException("DeleteExecutor::Init() lock fail");
+    }
+  } catch (TransactionAbortException &e) {
+    assert(txn->GetState() == TransactionState::ABORTED);
     throw ExecutionException("DeleteExecutor::Init() lock fail");
   }
 }
@@ -56,10 +59,13 @@ auto DeleteExecutor::Next(Tuple *tuple, RID *rid) -> bool {
   int cnt = 0;
 
   while (child_executor_->Next(&child_tuple, rid)) {
-    if (!lock_mgr->LockRow(txn, LockManager::LockMode::EXCLUSIVE, oid, *rid)) {
+    bool res = true;
+    res = lock_mgr->LockRow(txn, LockManager::LockMode::EXCLUSIVE, oid, *rid);
+    if (!res) {
       txn->SetState(TransactionState::ABORTED);
-      throw ExecutionException("DeleteExecutor::Next() lock fail");
+      throw ExecutionException("InsertExecutor::Next() lock fail");
     }
+
     auto status = table_info->table_->MarkDelete(*rid, txn);
 
     if (status) {
@@ -76,9 +82,7 @@ auto DeleteExecutor::Next(Tuple *tuple, RID *rid) -> bool {
     }
   }
 
-  std::vector<Value> values;
-  values.emplace_back(ValueFactory::GetIntegerValue(cnt));
-  *tuple = Tuple{values, &plan_->OutputSchema()};
+  *tuple = Tuple{{ValueFactory::GetIntegerValue(cnt)}, &plan_->OutputSchema()};
   return true;
 }
 

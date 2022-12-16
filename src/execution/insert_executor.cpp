@@ -13,6 +13,7 @@
 #include <memory>
 
 #include "common/exception.h"
+#include "common/logger.h"
 #include "concurrency/lock_manager.h"
 #include "concurrency/transaction.h"
 #include "execution/executors/insert_executor.h"
@@ -32,17 +33,22 @@ void InsertExecutor::Init() {
   const auto &lock_mgr = exec_ctx_->GetLockManager();
   const auto &txn = exec_ctx_->GetTransaction();
   const auto oid = plan_->table_oid_;
-  bool res = true;
-  if (txn->GetIsolationLevel() == IsolationLevel::READ_UNCOMMITTED) {
-    res = lock_mgr->LockTable(exec_ctx_->GetTransaction(), LockManager::LockMode::EXCLUSIVE, oid);
-  } else {
-    if (!txn->IsTableSharedIntentionExclusiveLocked(oid)) {
+  try {
+    bool res = true;
+    if (txn->GetIsolationLevel() != IsolationLevel::READ_UNCOMMITTED) {
+      if (!txn->IsTableSharedIntentionExclusiveLocked(oid)) {
+        res = lock_mgr->LockTable(exec_ctx_->GetTransaction(), LockManager::LockMode::INTENTION_EXCLUSIVE, oid);
+      }
+    } else {
       res = lock_mgr->LockTable(exec_ctx_->GetTransaction(), LockManager::LockMode::INTENTION_EXCLUSIVE, oid);
     }
-  }
-  if (!res) {
-    txn->SetState(TransactionState::ABORTED);
-    throw ExecutionException("InsertExecutor::Init() lock fail");
+    if (!res) {
+      assert(txn->GetState() == TransactionState::ABORTED);
+      throw ExecutionException("InsertExecutor::Init() lock fail");
+    }
+  } catch (TransactionAbortException &e) {
+    assert(txn->GetState() == TransactionState::ABORTED);
+    throw ExecutionException("DeleteExecutor::Init() lock fail");
   }
 }
 
@@ -63,7 +69,8 @@ auto InsertExecutor::Next(Tuple *tuple, RID *rid) -> bool {
 
   while (child_executor_->Next(&child_tuple, rid)) {
     auto status = table_info->table_->InsertTuple(child_tuple, rid, txn);
-    bool res = lock_mgr->LockRow(txn, LockManager::LockMode::EXCLUSIVE, oid, *rid);
+    bool res = true;
+    res = lock_mgr->LockRow(txn, LockManager::LockMode::EXCLUSIVE, oid, *rid);
     if (!res) {
       txn->SetState(TransactionState::ABORTED);
       throw ExecutionException("InsertExecutor::Next() lock fail");

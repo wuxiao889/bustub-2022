@@ -336,6 +336,8 @@ class LockManager {
    */
   auto UnlockRow(Transaction *txn, const table_oid_t &oid, const RID &rid) -> bool;
 
+  auto IsTableLocked(Transaction *txn, const table_oid_t &oid, const std::vector<LockMode> &lock_modes) -> bool;
+
   /*** Graph API ***/
 
   /*

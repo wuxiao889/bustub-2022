@@ -486,8 +486,6 @@ TEST(LockManagerTest, UpgradeTest1) {
   delete txn2;
 }
 
-
-
 TEST(LockManagerTest, DirtyRead) {}
 
 }  // namespace bustub

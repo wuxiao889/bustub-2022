@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 #include "execution/executors/index_scan_executor.h"
+#include <cassert>
 #include "catalog/catalog.h"
 #include "common/config.h"
 #include "concurrency/lock_manager.h"
@@ -43,7 +44,8 @@ auto IndexScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
     return false;
   }
 
-  auto *tree = dynamic_cast<BPlusTreeIndexForOneIntegerColumn *>(index_info_->index_.get());
+  auto *tree = static_cast<BPlusTreeIndexForOneIntegerColumn *>(index_info_->index_.get());
+  assert(tree);
   auto end = tree->GetEndIterator();
   const auto &bpm = exec_ctx_->GetBufferPoolManager();
   const auto &lock_mgr = exec_ctx_->GetLockManager();
@@ -86,7 +88,6 @@ auto IndexScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
     LockRow(lock_mgr, txn, oid, *rid);
 
     table_page = reinterpret_cast<TablePage *>(bpm->FetchPage(rid->GetPageId())->GetData());
-    // assert?
     table_page->GetTuple(*rid, tuple, txn, exec_ctx_->GetLockManager());
     bpm->UnpinPage(rid->GetPageId(), false);
 
@@ -103,23 +104,15 @@ void IndexScanExecutor::LockTable(LockManager *lock_mgr, Transaction *txn, table
   bool res = true;
   if (!txn->IsTableExclusiveLocked(oid)) {
     if (plan_->filter_predicate_ != nullptr) {
-      if (txn->GetIsolationLevel() == IsolationLevel::READ_UNCOMMITTED) {
-        // SIX -> IX
-        if (!txn->IsTableSharedIntentionExclusiveLocked(oid)) {
-          res = lock_mgr->LockTable(txn, LockManager::LockMode::INTENTION_EXCLUSIVE, oid);
-        }
-      } else {
+      if (txn->GetIsolationLevel() != IsolationLevel::READ_UNCOMMITTED) {
         // S SIX IX -> IS
         if (!txn->IsTableSharedLocked(oid) && !txn->IsTableIntentionExclusiveLocked(oid) &&
             !txn->IsTableSharedIntentionExclusiveLocked(oid)) {
           res = lock_mgr->LockTable(txn, LockManager::LockMode::INTENTION_SHARED, oid);
         }
       }
-
     } else {
-      if (txn->GetIsolationLevel() == IsolationLevel::READ_UNCOMMITTED) {
-        res = lock_mgr->LockTable(txn, LockManager::LockMode::EXCLUSIVE, oid);
-      } else {
+      if (txn->GetIsolationLevel() != IsolationLevel::READ_UNCOMMITTED) {
         // IX SIX -> S
         if (!txn->IsTableIntentionExclusiveLocked(oid) && !txn->IsTableSharedIntentionExclusiveLocked(oid)) {
           res = lock_mgr->LockTable(txn, LockManager::LockMode::SHARED, oid);
@@ -148,8 +141,6 @@ void IndexScanExecutor::LockRow(LockManager *lock_mgr, Transaction *txn, table_o
     if (!txn->IsRowExclusiveLocked(oid, rid)) {
       res = lock_mgr->LockRow(txn, LockManager::LockMode::SHARED, oid, rid);
     }
-  } else {
-    res = lock_mgr->LockRow(txn, LockManager::LockMode::EXCLUSIVE, oid, rid);
   }
   if (!res) {
     txn->SetState(TransactionState::ABORTED);

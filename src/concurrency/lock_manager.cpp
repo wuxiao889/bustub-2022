@@ -47,6 +47,21 @@ namespace bustub {
   SIX   √    ×    ×    ×    ×
   X     ×    ×    ×    ×    ×
 */
+auto LockModeToString(LockManager::LockMode lock_mode) -> std::string {
+  switch (lock_mode) {
+    case LockManager::LockMode::SHARED:
+      return "SHARED";
+    case LockManager::LockMode::EXCLUSIVE:
+      return "EXCLUSIVE";
+    case LockManager::LockMode::INTENTION_SHARED:
+      return "INTENTION_SHARED";
+    case LockManager::LockMode::INTENTION_EXCLUSIVE:
+      return "INTENTION_EXCLUSIVE";
+    case LockManager::LockMode::SHARED_INTENTION_EXCLUSIVE:
+      return "SHARED_INTENTION_EXCLUSIVE";
+  }
+  return "";
+}
 
 auto LockManager::LockRequestQueue::CheckCompatibility(LockMode lock_mode, ListType::iterator ite) -> bool {
   // all earlier requests should have been granted already
@@ -172,16 +187,26 @@ auto LockManager::LockTable(Transaction *txn, LockMode lock_mode, const table_oi
     // check upgrade
     for (request_it = request_queue.begin(); request_it != request_queue.end(); ++request_it) {
       const auto &request = *request_it;
+      // 不能简单的判定 !granted就停止。
+      // 例子
+      // [S] IX IX
+      //  0   1  2
 
+      // IX [IX]
+      // 1   2
+
+      // 这时2要升级 SIX就会造成
+      // IX  [IX]  =>   [SIX] IX [IX]
+      // 1    2          2   1  2
+      //  IS -> [S, X, IX, SIX]
+      //  S -> [X, SIX]
+      //  IX -> [X, SIX]
+      //  SIX -> [X]
       if (request->txn_id_ == txn_id) {
         old_lock_mode = request->lock_mode_;
         if (old_lock_mode == lock_mode) {
           return true;
         }
-        //  IS -> [S, X, IX, SIX]
-        //  S -> [X, SIX]
-        //  IX -> [X, SIX]
-        //  SIX -> [X]
         switch (old_lock_mode) {
           case LockMode::INTENTION_SHARED:
             break;
@@ -446,8 +471,9 @@ auto LockManager::LockRow(Transaction *txn, LockMode lock_mode, const table_oid_
       LOG_WARN("INCOMPATIBLE_UPGRADE\n");
       throw TransactionAbortException(txn_id, AbortReason::INCOMPATIBLE_UPGRADE);
     }
-    if (!txn->IsTableIntentionExclusiveLocked(oid) && !txn->IsTableSharedIntentionExclusiveLocked(oid) &&
-        !txn->IsTableExclusiveLocked(oid) && !txn->IsTableSharedLocked(oid) && !txn->IsTableSharedLocked(oid)) {
+    if (!IsTableLocked(txn, oid,
+                       {LockMode::INTENTION_SHARED, LockMode::INTENTION_EXCLUSIVE, LockMode::SHARED_INTENTION_EXCLUSIVE,
+                        LockMode::SHARED, LockMode::EXCLUSIVE})) {
       txn->SetState(TransactionState::ABORTED);
       LOG_WARN("TABLE_LOCK_NOT_PRESENT\n");
       throw TransactionAbortException(txn_id, AbortReason::TABLE_LOCK_NOT_PRESENT);
@@ -456,8 +482,8 @@ auto LockManager::LockRow(Transaction *txn, LockMode lock_mode, const table_oid_
     if (txn->IsRowExclusiveLocked(oid, rid)) {
       return true;
     }
-    if (!txn->IsTableIntentionExclusiveLocked(oid) && !txn->IsTableSharedIntentionExclusiveLocked(oid) &&
-        !txn->IsTableExclusiveLocked(oid)) {
+    if (!IsTableLocked(txn, oid,
+                       {LockMode::INTENTION_EXCLUSIVE, LockMode::SHARED_INTENTION_EXCLUSIVE, LockMode::EXCLUSIVE})) {
       txn->SetState(TransactionState::ABORTED);
       LOG_WARN("TABLE_LOCK_NOT_PRESENT\n");
       throw TransactionAbortException(txn_id, AbortReason::TABLE_LOCK_NOT_PRESENT);
@@ -793,6 +819,34 @@ auto LockManager::LockRequest::ToString() -> std::string {
   return fmt::format("[{} {} {}] ", txn_id_, lock_mode_, granted_);
 }
 
+auto LockManager::IsTableLocked(Transaction *txn, const table_oid_t &oid, const std::vector<LockMode> &lock_modes)
+    -> bool {
+  for (const auto &lock_mode : lock_modes) {
+    bool locked = false;
+    switch (lock_mode) {
+      case LockMode::SHARED:
+        locked = txn->IsTableSharedLocked(oid);
+        break;
+      case LockMode::EXCLUSIVE:
+        locked = txn->IsTableExclusiveLocked(oid);
+        break;
+      case LockMode::INTENTION_SHARED:
+        locked = txn->IsTableIntentionSharedLocked(oid);
+        break;
+      case LockMode::INTENTION_EXCLUSIVE:
+        locked = txn->IsTableIntentionExclusiveLocked(oid);
+        break;
+      case LockMode::SHARED_INTENTION_EXCLUSIVE:
+        locked = txn->IsTableSharedIntentionExclusiveLocked(oid);
+        break;
+    }
+    if (locked) {
+      return true;
+    }
+  }
+  return false;
+}
+
 }  // namespace bustub
 
 template <>
@@ -813,26 +867,10 @@ struct fmt::formatter<std::shared_ptr<T>,
   }
 };
 
-auto LockModeToString(bustub::LockManager::LockMode lock_mode) -> std::string {
-  switch (lock_mode) {
-    case bustub::LockManager::LockMode::SHARED:
-      return "SHARED";
-    case bustub::LockManager::LockMode::EXCLUSIVE:
-      return "EXCLUSIVE";
-    case bustub::LockManager::LockMode::INTENTION_SHARED:
-      return "INTENTION_SHARED";
-    case bustub::LockManager::LockMode::INTENTION_EXCLUSIVE:
-      return "INTENTION_EXCLUSIVE";
-    case bustub::LockManager::LockMode::SHARED_INTENTION_EXCLUSIVE:
-      return "SHARED_INTENTION_EXCLUSIVE";
-  }
-  return "";
-}
-
 template <>
 struct fmt::formatter<bustub::LockManager::LockMode> : formatter<string_view> {
   template <typename FormatContext>
   auto format(bustub::LockManager::LockMode lock_mode, FormatContext &ctx) const {
-    return formatter<string_view>::format(::LockModeToString(lock_mode), ctx);
+    return formatter<string_view>::format(bustub::LockModeToString(lock_mode), ctx);
   }
 };

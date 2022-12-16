@@ -98,7 +98,7 @@ TEST(LockManagerTest, CompatibilityTest1) {
     std::this_thread::sleep_for(std::chrono::milliseconds(30));
     res = lock_mgr.LockTable(txn2, LockManager::LockMode::INTENTION_SHARED, oid);
     EXPECT_TRUE(res);
-    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    std::this_thread::sleep_for(std::chrono::milliseconds(40));
     res = lock_mgr.UnlockTable(txn2, oid);
     txn_mgr.Commit(txn2);
   });

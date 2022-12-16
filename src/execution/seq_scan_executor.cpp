@@ -34,15 +34,13 @@ void SeqScanExecutor::Init() {
   bool res = true;
 
   try {
-    if (txn->GetIsolationLevel() == IsolationLevel::READ_UNCOMMITTED) {
-      res = lock_mgr->LockTable(txn, LockManager::LockMode::EXCLUSIVE, oid);
-    } else {
+    if (txn->GetIsolationLevel() != IsolationLevel::READ_UNCOMMITTED) {
       if (!txn->IsTableIntentionExclusiveLocked(oid) && !txn->IsTableSharedIntentionExclusiveLocked(oid)) {
         res = lock_mgr->LockTable(txn, LockManager::LockMode::SHARED, oid);
       }
     }
     if (!res) {
-      txn->SetState(TransactionState::ABORTED);
+      assert(txn->GetState() == TransactionState::ABORTED);
       throw ExecutionException("SeqScanExecutor::Init() lock fail");
     }
   } catch (TransactionAbortException &e) {
@@ -72,24 +70,14 @@ auto SeqScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
 
     *rid = cur_->GetRid();
 
-    try {
-      bool res = true;
-      switch (txn->GetIsolationLevel()) {
-        case IsolationLevel::REPEATABLE_READ:
-        case IsolationLevel::READ_COMMITTED:
-          if (!txn->IsRowExclusiveLocked(oid, *rid)) {
-            res = lock_mgr->LockRow(txn, LockManager::LockMode::SHARED, oid, *rid);
-          }
-          break;
-        case IsolationLevel::READ_UNCOMMITTED:
-          res = lock_mgr->LockRow(txn, LockManager::LockMode::EXCLUSIVE, oid, *rid);
+    bool res = true;
+    if (txn->GetIsolationLevel() != IsolationLevel::READ_UNCOMMITTED) {
+      if (!txn->IsRowExclusiveLocked(oid, *rid)) {
+        res = lock_mgr->LockRow(txn, LockManager::LockMode::SHARED, oid, *rid);
       }
-      if (!res) {
-        txn->SetState(TransactionState::ABORTED);
-        throw ExecutionException("SeqScanExecutor::Next() lock fail");
-      }
-    } catch (TransactionAbortException &e) {
-      assert(txn->GetState() == TransactionState::ABORTED);
+    }
+    if (!res) {
+      txn->SetState(TransactionState::ABORTED);
       throw ExecutionException("SeqScanExecutor::Next() lock fail");
     }
 
