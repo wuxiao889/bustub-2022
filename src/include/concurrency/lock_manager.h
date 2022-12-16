@@ -18,6 +18,7 @@
 #include <list>
 #include <memory>
 #include <mutex>  // NOLINT
+#include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -61,6 +62,8 @@ class LockManager {
     RID rid_;
     /** Whether the lock has been granted or not */
     bool granted_{false};
+
+    auto ToString() -> std::string;
   };
 
   /*
@@ -257,7 +260,7 @@ class LockManager {
    *    REPEATABLE_READ: repeatable reads，no dirty reads
    *        Unlocking S/X locks should set the transaction state to SHRINKING
    *
-   *    READ_COMMITTED:
+   *    READ_COMMITTED:  no repeatable reads
    *        Unlocking X locks should set the transaction state to SHRINKING.
    *        Unlocking S locks does not affect transaction state. (unrepeatable read)
    *
@@ -415,6 +418,7 @@ class LockManager {
 
   std::vector<txn_id_t> waits_;
   std::unordered_map<txn_id_t, std::variant<table_oid_t, RID>> txn_variant_map_;
+  std::mutex txn_variant_map_latch_;  //
 };
 
 }  // namespace bustub

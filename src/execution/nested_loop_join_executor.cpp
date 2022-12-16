@@ -34,8 +34,7 @@ NestedLoopJoinExecutor::NestedLoopJoinExecutor(ExecutorContext *exec_ctx, const 
       left_child_executor_(std::move(left_executor)),
       right_child_executor_(std::move(right_executor)),
       joined_(false),
-      reorded_(false),
-      is_both_seq_(false) {
+      reorded_(false) {
   if (plan->GetJoinType() != JoinType::LEFT && plan->GetJoinType() != JoinType::INNER) {
     // Note for 2022 Fall: You ONLY need to implement left join and inner join.
     throw bustub::NotImplementedException(fmt::format("join type {} not supported", plan->GetJoinType()));
@@ -50,25 +49,6 @@ void NestedLoopJoinExecutor::Init() {
     reorded_ =
         plan_->output_schema_->GetColumn(0).GetName() != plan_->GetLeftPlan()->output_schema_->GetColumn(0).GetName();
   }
-  // TODO(wxx) implement BLOCK NESTED LOOP JOIN
-  // auto left_ctx = left_child_executor_->GetExecutorContext();
-  // auto right_ctx = right_child_executor_->GetExecutorContext();
-  // auto left_plan = plan_->GetLeftPlan().get();
-  // auto right_plan = plan_->GetRightPlan().get();
-
-  // if (left_plan->GetType() == right_plan->GetType() && left_plan->GetType() == PlanType::SeqScan) {
-  //   is_both_seq_ = true;
-
-  //   auto left_seq_plan = static_cast<const SeqScanPlanNode *>(left_plan);
-  //   auto right_seq_plan = static_cast<const SeqScanPlanNode *>(right_plan);
-  //   left_table_info_ = left_ctx->GetCatalog()->GetTable(left_seq_plan->GetTableOid());
-  //   right_table_info_ = right_ctx->GetCatalog()->GetTable(right_seq_plan->GetTableOid());
-
-  //   auto *bpm = exec_ctx_->GetBufferPoolManager();
-  //   auto pool_size = bpm->GetPoolSize();
-  //   left_pool_size_ = pool_size - 2;
-  //   right_pool_size_ = 1;
-  // }
 }
 
 auto NestedLoopJoinExecutor::Next(Tuple *tuple, RID *rid) -> bool {

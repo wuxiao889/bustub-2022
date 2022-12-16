@@ -174,8 +174,8 @@ see the execution plan of your query.
 }
 
 auto BustubInstance::ExecuteSql(const std::string &sql, ResultWriter &writer) -> bool {
-  fmt::print("{}:{}\n", __PRETTY_FUNCTION__, __LINE__);
-  fmt::print(fmt::fg(fmt::color::green) | fmt::emphasis::bold, "{}\n", sql);
+  // fmt::print("{}:{}\n", __PRETTY_FUNCTION__, __LINE__);
+  // fmt::print(fmt::fg(fmt::color::green) | fmt::emphasis::bold, "{}\n", sql);
   auto txn = txn_manager_->Begin();
   auto result = ExecuteSqlTxn(sql, writer, txn);
   txn_manager_->Commit(txn);
@@ -326,8 +326,9 @@ auto BustubInstance::ExecuteSqlTxn(const std::string &sql, ResultWriter &writer,
     // Execute the query.
     auto exec_ctx = MakeExecutorContext(txn);
     std::vector<Tuple> result_set{};
-    fmt::print("{}:{}\n", __PRETTY_FUNCTION__, __LINE__);
-    fmt::print(fmt::fg(fmt::color::medium_blue) | fmt::emphasis::bold, "{}\n", optimized_plan->ToString());
+    // fmt::print("{}:{}\n", __PRETTY_FUNCTION__, __LINE__);
+    // fmt::print(fmt::fg(fmt::color::medium_blue) | fmt::emphasis::bold, "txn {}\n{}\n", txn->GetTransactionId(),
+    //            optimized_plan->ToString());
     is_successful &= execution_engine_->Execute(optimized_plan, &result_set, txn, exec_ctx.get());
 
     // Return the result set as a vector of string.

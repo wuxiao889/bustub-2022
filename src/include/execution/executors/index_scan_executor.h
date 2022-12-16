@@ -16,6 +16,8 @@
 
 #include "catalog/catalog.h"
 #include "common/rid.h"
+#include "concurrency/lock_manager.h"
+#include "concurrency/transaction.h"
 #include "execution/executor_context.h"
 #include "execution/executors/abstract_executor.h"
 #include "execution/plans/index_scan_plan.h"
@@ -45,6 +47,11 @@ class IndexScanExecutor : public AbstractExecutor {
   retrieve their tuples in the corresponding table. It then emits these tuples one-at-a-time.
   */
   auto Next(Tuple *tuple, RID *rid) -> bool override;
+
+  void LockTable(LockManager *lock_mgr, Transaction *txn, table_oid_t oid);
+  void UnLockTable(LockManager *lock_mgr, Transaction *txn, table_oid_t oid);
+  void LockRow(LockManager *lock_mgr, Transaction *txn, table_oid_t oid, const RID &rid);
+  void UnLockRow(LockManager *lock_mgr, Transaction *txn, table_oid_t oid, const RID &rid);
 
  private:
   /** The index scan plan node to be executed. */

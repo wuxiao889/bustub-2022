@@ -70,12 +70,6 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
   Tuple left_tuple_{};
   bool joined_;
   bool reorded_;
-
-  bool is_both_seq_;
-  size_t left_pool_size_;
-  size_t right_pool_size_;
-  TableInfo *left_table_info_{};
-  TableInfo *right_table_info_{};
 };
 
 }  // namespace bustub

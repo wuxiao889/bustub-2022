@@ -11,6 +11,8 @@
 //===----------------------------------------------------------------------===//
 #include <memory>
 
+#include "concurrency/lock_manager.h"
+#include "concurrency/transaction.h"
 #include "execution/executors/update_executor.h"
 #include "fmt/core.h"
 #include "storage/table/tuple.h"
@@ -28,7 +30,28 @@ UpdateExecutor::UpdateExecutor(ExecutorContext *exec_ctx, const UpdatePlanNode *
   // As of Fall 2022, you DON'T need to implement update executor to have perfect score in project 3 / project 4.
 }
 
-void UpdateExecutor::Init() { child_executor_->Init(); }
+void UpdateExecutor::Init() {
+  child_executor_->Init();
+  const auto &lock_mgr = exec_ctx_->GetLockManager();
+  const auto &txn = exec_ctx_->GetTransaction();
+  const auto oid = plan_->table_oid_;
+
+  try {
+    bool res;
+    if (txn->GetIsolationLevel() == IsolationLevel::READ_UNCOMMITTED) {
+      res = lock_mgr->LockTable(exec_ctx_->GetTransaction(), LockManager::LockMode::EXCLUSIVE, oid);
+    } else {
+      res = lock_mgr->LockTable(exec_ctx_->GetTransaction(), LockManager::LockMode::SHARED_INTENTION_EXCLUSIVE, oid);
+    }
+    if (!res) {
+      txn->SetState(TransactionState::ABORTED);
+      throw ExecutionException("UpdateExecutor::Init() lock fail");
+    }
+  } catch (TransactionAbortException &e) {
+    assert(txn->GetState() == TransactionState::ABORTED);
+    throw ExecutionException("UpdateExecutor::Init() lock fail");
+  }
+}
 
 auto UpdateExecutor::Next(Tuple *tuple, RID *rid) -> bool {
   if (updated_) {
@@ -38,11 +61,24 @@ auto UpdateExecutor::Next(Tuple *tuple, RID *rid) -> bool {
 
   size_t cnt = 0;
   Tuple child_tuple;
-  const auto &schema = child_executor_->GetOutputSchema();
+  const auto &txn = exec_ctx_->GetTransaction();
+  const auto &lock_mgr = exec_ctx_->GetLockManager();
+  const auto oid = plan_->table_oid_;
 
-  std::vector<Value> values;
-  values.reserve(plan_->target_expressions_.size());
+  const auto &schema = child_executor_->GetOutputSchema();
   while (child_executor_->Next(&child_tuple, rid)) {
+    try {
+      if (!lock_mgr->LockRow(txn, LockManager::LockMode::EXCLUSIVE, oid, *rid)) {
+        txn->SetState(TransactionState::ABORTED);
+        throw ExecutionException("UpdateExecutor::Next() lock fail");
+      }
+    } catch (TransactionAbortException &e) {
+      assert(txn->GetState() == TransactionState::ABORTED);
+      throw ExecutionException("UpdateExecutor::Next() lock fail");
+    }
+
+    std::vector<Value> values;
+    values.reserve(plan_->target_expressions_.size());
     // fmt::print("tuple {}\n", child_tuple.ToString(&schema));
     for (const auto &expr : plan_->target_expressions_) {
       values.push_back(expr->Evaluate(&child_tuple, schema));
@@ -51,7 +87,6 @@ auto UpdateExecutor::Next(Tuple *tuple, RID *rid) -> bool {
     // fmt::print("new tuple {}\n", new_tuple.ToString(&schema));
     bool res = table_info_->table_->UpdateTuple(new_tuple, *rid, exec_ctx_->GetTransaction());
     cnt += res ? 1 : 0;
-    values.clear();
   }
 
   *tuple = Tuple{{ValueFactory::GetIntegerValue(cnt)}, &GetOutputSchema()};

@@ -11,7 +11,10 @@
 //===----------------------------------------------------------------------===//
 
 #include "execution/executors/seq_scan_executor.h"
+#include <cassert>
 #include "common/config.h"
+#include "concurrency/lock_manager.h"
+#include "concurrency/transaction.h"
 
 namespace bustub {
 
@@ -23,13 +26,38 @@ SeqScanExecutor::SeqScanExecutor(ExecutorContext *exec_ctx, const SeqScanPlanNod
       cur_page_id_(INVALID_PAGE_ID) {}
 
 void SeqScanExecutor::Init() {
-  cur_ = table_info_->table_->Begin(exec_ctx_->GetTransaction());
+  const auto &txn = exec_ctx_->GetTransaction();
+  const auto &lock_mgr = exec_ctx_->GetLockManager();
+  const auto oid = plan_->table_oid_;
+  cur_ = table_info_->table_->Begin(txn);
   cur_page_id_ = INVALID_PAGE_ID;
+  bool res = true;
+
+  try {
+    if (txn->GetIsolationLevel() == IsolationLevel::READ_UNCOMMITTED) {
+      res = lock_mgr->LockTable(txn, LockManager::LockMode::EXCLUSIVE, oid);
+    } else {
+      if (!txn->IsTableIntentionExclusiveLocked(oid) && !txn->IsTableSharedIntentionExclusiveLocked(oid)) {
+        res = lock_mgr->LockTable(txn, LockManager::LockMode::SHARED, oid);
+      }
+    }
+    if (!res) {
+      txn->SetState(TransactionState::ABORTED);
+      throw ExecutionException("SeqScanExecutor::Init() lock fail");
+    }
+  } catch (TransactionAbortException &e) {
+    assert(txn->GetState() == TransactionState::ABORTED);
+    throw ExecutionException("SeqScanExecutor::Init() lock fail");
+  }
 }
 
 auto SeqScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
   auto end = table_info_->table_->End();
   const auto &bpm = exec_ctx_->GetBufferPoolManager();
+  const auto &txn = exec_ctx_->GetTransaction();
+  const auto &lock_mgr = exec_ctx_->GetLockManager();
+  const auto oid = plan_->GetTableOid();
+
   while (cur_ != end) {
     // TODO(wxx) optimize lurk
     // lruk实现有问题，
@@ -41,9 +69,39 @@ auto SeqScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
       cur_page_id_ = page_id;
       bpm->FetchPage(cur_page_id_);
     }
-    *tuple = *cur_;
+
     *rid = cur_->GetRid();
+
+    try {
+      bool res = true;
+      switch (txn->GetIsolationLevel()) {
+        case IsolationLevel::REPEATABLE_READ:
+        case IsolationLevel::READ_COMMITTED:
+          if (!txn->IsRowExclusiveLocked(oid, *rid)) {
+            res = lock_mgr->LockRow(txn, LockManager::LockMode::SHARED, oid, *rid);
+          }
+          break;
+        case IsolationLevel::READ_UNCOMMITTED:
+          res = lock_mgr->LockRow(txn, LockManager::LockMode::EXCLUSIVE, oid, *rid);
+      }
+      if (!res) {
+        txn->SetState(TransactionState::ABORTED);
+        throw ExecutionException("SeqScanExecutor::Next() lock fail");
+      }
+    } catch (TransactionAbortException &e) {
+      assert(txn->GetState() == TransactionState::ABORTED);
+      throw ExecutionException("SeqScanExecutor::Next() lock fail");
+    }
+
+    *tuple = *cur_;
     cur_++;
+
+    if (txn->GetIsolationLevel() == IsolationLevel::READ_COMMITTED) {
+      if (txn->IsRowSharedLocked(oid, *rid)) {
+        lock_mgr->UnlockRow(txn, oid, *rid);
+      }
+    }
+
     if (plan_->filter_predicate_ != nullptr) {
       const auto value = plan_->filter_predicate_->Evaluate(tuple, plan_->OutputSchema());
       if (value.IsNull() || !value.GetAs<bool>()) {
@@ -51,11 +109,20 @@ auto SeqScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
       }
     }
     // fmt::print("SeqScanExecutor::Next {}\n", tuple->ToString(&plan_->OutputSchema()));
+
     return true;
   }
+
   if (cur_page_id_ != INVALID_PAGE_ID) {
     bpm->UnpinPage(cur_page_id_, false);
   }
+
+  if (txn->GetIsolationLevel() == IsolationLevel::READ_COMMITTED) {
+    if (txn->IsTableSharedLocked(oid)) {
+      lock_mgr->UnlockTable(txn, oid);
+    }
+  }
+
   return false;
 }
 

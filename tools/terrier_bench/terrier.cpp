@@ -15,6 +15,7 @@
 #include "common/util/string_util.h"
 #include "concurrency/transaction.h"
 #include "concurrency/transaction_manager.h"
+#include "fmt/color.h"
 #include "fmt/core.h"
 #include "fmt/std.h"
 #include "terrier_bench_config.h"
@@ -235,6 +236,7 @@ auto main(int argc, char **argv) -> int {
         if (enable_update) {
           auto txn = bustub->txn_manager_->Begin(nullptr, bustub::IsolationLevel::REPEATABLE_READ);
           std::string query = fmt::format("UPDATE nft SET terrier = {} WHERE id = {}", terrier_id, nft_id);
+          // fmt::print(fmt::fg(fmt::color::blue), "{}\n", query);
           if (!bustub->ExecuteSqlTxn(query, writer, txn)) {
             txn_success = false;
           }
@@ -256,6 +258,7 @@ auto main(int argc, char **argv) -> int {
           auto txn = bustub->txn_manager_->Begin(nullptr, bustub::IsolationLevel::REPEATABLE_READ);
 
           std::string query = fmt::format("DELETE FROM nft WHERE id = {}", nft_id);
+          // fmt::print(fmt::fg(fmt::color::red), "{}\n", query);
           if (!bustub->ExecuteSqlTxn(query, writer, txn)) {
             txn_success = false;
           }
@@ -276,6 +279,7 @@ auto main(int argc, char **argv) -> int {
             txn = bustub->txn_manager_->Begin(nullptr, bustub::IsolationLevel::REPEATABLE_READ);
 
             query = fmt::format("INSERT INTO nft VALUES ({}, {})", nft_id, terrier_id);
+            // fmt::print(fmt::fg(fmt::color::green), "{}\n", query);
             if (!bustub->ExecuteSqlTxn(query, writer, txn)) {
               txn_success = false;
             }
@@ -321,6 +325,7 @@ auto main(int argc, char **argv) -> int {
         bool txn_success = true;
 
         std::string query = fmt::format("SELECT count(*) FROM nft WHERE terrier = {}", terrier_id);
+        // fmt::print(fmt::fg(fmt::color::orange), "{}\n", query);
         if (!bustub->ExecuteSqlTxn(query, writer, txn)) {
           txn_success = false;
         }

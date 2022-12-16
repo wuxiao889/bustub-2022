@@ -12,6 +12,8 @@
 
 #include <memory>
 
+#include "concurrency/lock_manager.h"
+#include "concurrency/transaction.h"
 #include "execution/executors/delete_executor.h"
 #include "type/value_factory.h"
 
@@ -21,7 +23,22 @@ DeleteExecutor::DeleteExecutor(ExecutorContext *exec_ctx, const DeletePlanNode *
                                std::unique_ptr<AbstractExecutor> &&child_executor)
     : AbstractExecutor(exec_ctx), plan_(plan), child_executor_(std::move(child_executor)) {}
 
-void DeleteExecutor::Init() { child_executor_->Init(); }
+void DeleteExecutor::Init() {
+  child_executor_->Init();
+  const auto &lock_mgr = exec_ctx_->GetLockManager();
+  const auto &txn = exec_ctx_->GetTransaction();
+  const auto oid = plan_->table_oid_;
+  bool res;
+  if (txn->GetIsolationLevel() == IsolationLevel::READ_UNCOMMITTED) {
+    res = lock_mgr->LockTable(exec_ctx_->GetTransaction(), LockManager::LockMode::EXCLUSIVE, oid);
+  } else {
+    res = lock_mgr->LockTable(exec_ctx_->GetTransaction(), LockManager::LockMode::SHARED_INTENTION_EXCLUSIVE, oid);
+  }
+  if (!res) {
+    txn->SetState(TransactionState::ABORTED);
+    throw ExecutionException("DeleteExecutor::Init() lock fail");
+  }
+}
 
 auto DeleteExecutor::Next(Tuple *tuple, RID *rid) -> bool {
   if (deleted_) {
@@ -30,13 +47,19 @@ auto DeleteExecutor::Next(Tuple *tuple, RID *rid) -> bool {
   deleted_ = true;
 
   Tuple child_tuple{};
-  ExecutorContext *ctx = GetExecutorContext();
-  Transaction *txn = ctx->GetTransaction();
-  TableInfo *table_info = ctx->GetCatalog()->GetTable(plan_->table_oid_);
+  const auto &ctx = GetExecutorContext();
+  const auto &txn = ctx->GetTransaction();
+  const auto &lock_mgr = exec_ctx_->GetLockManager();
+  const auto oid = plan_->table_oid_;
+  const auto &table_info = ctx->GetCatalog()->GetTable(oid);
 
   int cnt = 0;
 
   while (child_executor_->Next(&child_tuple, rid)) {
+    if (!lock_mgr->LockRow(txn, LockManager::LockMode::EXCLUSIVE, oid, *rid)) {
+      txn->SetState(TransactionState::ABORTED);
+      throw ExecutionException("DeleteExecutor::Next() lock fail");
+    }
     auto status = table_info->table_->MarkDelete(*rid, txn);
 
     if (status) {
@@ -47,6 +70,8 @@ auto DeleteExecutor::Next(Tuple *tuple, RID *rid) -> bool {
         auto new_key = child_tuple.KeyFromTuple(table_info->schema_, *index_info->index_->GetKeySchema(),
                                                 index_info->index_->GetKeyAttrs());
         index_info->index_->DeleteEntry(new_key, *rid, txn);
+        txn->GetIndexWriteSet()->emplace_back(*rid, oid, WType::DELETE, child_tuple, index_info->index_oid_,
+                                              exec_ctx_->GetCatalog());
       }
     }
   }
