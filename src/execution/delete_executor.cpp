@@ -40,8 +40,6 @@ auto DeleteExecutor::Next(Tuple *tuple, RID *rid) -> bool {
   Tuple child_tuple{};
   const auto &txn = exec_ctx_->GetTransaction();
   const auto &oid = plan_->table_oid_;
-  // const auto &lock_mgr = exec_ctx_->GetLockManager();
-
   int cnt = 0;
 
   while (child_executor_->Next(&child_tuple, rid)) {

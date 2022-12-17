@@ -33,7 +33,7 @@ IndexScanExecutor::IndexScanExecutor(ExecutorContext *exec_ctx, const IndexScanP
 void IndexScanExecutor::Init() {
   auto *tree = dynamic_cast<BPlusTreeIndexForOneIntegerColumn *>(index_info_->index_.get());
   cur_ = tree->GetBeginIterator();
-  // LockTable();
+  LockTable();
 }
 
 auto IndexScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
@@ -46,8 +46,6 @@ auto IndexScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
   auto end = tree->GetEndIterator();
   const auto &bpm = exec_ctx_->GetBufferPoolManager();
   const auto &txn = exec_ctx_->GetTransaction();
-  // auto *ctx = GetExecutorContext();
-  // auto *table_info = ctx->GetCatalog()->GetTable(index_info_->table_name_);
 
   TablePage *table_page{};
 
@@ -60,16 +58,16 @@ auto IndexScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
     index_info_->index_->ScanKey(key, &result, txn);
     // 只有一个
     for (auto result_rid : result) {
-      // LockRow(result_rid);
+      LockRow(result_rid);
       table_page = reinterpret_cast<TablePage *>(bpm->FetchPage(result_rid.GetPageId())->GetData());
       table_page->GetTuple(result_rid, tuple, txn, exec_ctx_->GetLockManager());
       *rid = result_rid;
       bpm->UnpinPage(result_rid.GetPageId(), false);
-      // UnLockRow(result_rid);
-      // UnLockTable();
+      UnLockRow(result_rid);
+      UnLockTable();
       return true;
     }
-    // UnLockTable();
+    UnLockTable();
     return false;
   }
 
@@ -77,16 +75,16 @@ auto IndexScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
     *rid = (*cur_).second;
     ++cur_;
 
-    // LockRow(*rid);
+    LockRow(*rid);
     table_page = reinterpret_cast<TablePage *>(bpm->FetchPage(rid->GetPageId())->GetData());
     table_page->GetTuple(*rid, tuple, txn, exec_ctx_->GetLockManager());
     bpm->UnpinPage(rid->GetPageId(), false);
-    // UnLockRow(*rid);
+    UnLockRow(*rid);
 
     return true;
   }
 
-  // UnLockTable();
+  UnLockTable();
   return false;
 }
 
@@ -95,27 +93,19 @@ void IndexScanExecutor::LockTable() {
   const auto &txn = exec_ctx_->GetTransaction();
   const auto &oid = table_info_->oid_;
   bool res = true;
-  if (!txn->IsTableExclusiveLocked(oid)) {
-    if (plan_->filter_predicate_ != nullptr) {
-      if (txn->GetIsolationLevel() != IsolationLevel::READ_UNCOMMITTED) {
-        // S SIX IX -> IS
-        if (!txn->IsTableSharedLocked(oid) && !txn->IsTableIntentionExclusiveLocked(oid) &&
-            !txn->IsTableSharedIntentionExclusiveLocked(oid)) {
-          res = lock_mgr->LockTable(txn, LockManager::LockMode::INTENTION_SHARED, oid);
-        }
-      }
-    } else {
-      if (txn->GetIsolationLevel() != IsolationLevel::READ_UNCOMMITTED) {
-        // IX SIX -> S
-        if (!txn->IsTableIntentionExclusiveLocked(oid) && !txn->IsTableSharedIntentionExclusiveLocked(oid)) {
-          res = lock_mgr->LockTable(txn, LockManager::LockMode::SHARED, oid);
-        }
+  try {
+    if (txn->GetIsolationLevel() != IsolationLevel::READ_UNCOMMITTED) {
+      if (!txn->IsTableIntentionExclusiveLocked(oid) && !txn->IsTableSharedIntentionExclusiveLocked(oid)) {
+        res = lock_mgr->LockTable(txn, LockManager::LockMode::INTENTION_SHARED, oid);
       }
     }
-  }
-  if (!res) {
-    txn->SetState(TransactionState::ABORTED);
-    throw ExecutionException("IndexScanExecutor::Init() lock fail");
+    if (!res) {
+      assert(txn->GetState() == TransactionState::ABORTED);
+      throw ExecutionException("IndexScanExecutor::LockTable() lock fail");
+    }
+  } catch (TransactionAbortException &e) {
+    assert(txn->GetState() == TransactionState::ABORTED);
+    throw ExecutionException("IndexScanExecutor::LockTable() lock fail");
   }
 }
 
@@ -124,8 +114,7 @@ void IndexScanExecutor::UnLockTable() {
   const auto &txn = exec_ctx_->GetTransaction();
   const auto &oid = table_info_->oid_;
   if (txn->GetIsolationLevel() == IsolationLevel::READ_COMMITTED) {
-    if (txn->IsTableSharedLocked(oid) || txn->IsTableIntentionSharedLocked(oid) ||
-        txn->IsTableSharedIntentionExclusiveLocked(oid)) {
+    if (txn->IsTableIntentionSharedLocked(oid)) {
       lock_mgr->UnlockTable(txn, oid);
     }
   }

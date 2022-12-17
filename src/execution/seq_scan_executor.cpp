@@ -82,7 +82,7 @@ void SeqScanExecutor::LockTable() {
   try {
     if (txn->GetIsolationLevel() != IsolationLevel::READ_UNCOMMITTED) {
       if (!txn->IsTableIntentionExclusiveLocked(oid) && !txn->IsTableSharedIntentionExclusiveLocked(oid)) {
-        res = lock_mgr->LockTable(txn, LockManager::LockMode::SHARED, oid);
+        res = lock_mgr->LockTable(txn, LockManager::LockMode::INTENTION_SHARED, oid);
       }
     }
     if (!res) {
@@ -100,7 +100,7 @@ void SeqScanExecutor::UnLockTable() {
   const auto &lock_mgr = exec_ctx_->GetLockManager();
   const auto &oid = plan_->GetTableOid();
   if (txn->GetIsolationLevel() == IsolationLevel::READ_COMMITTED) {
-    if (txn->IsTableSharedLocked(oid)) {
+    if (txn->IsTableIntentionSharedLocked(oid)) {
       lock_mgr->UnlockTable(txn, oid);
     }
   }
