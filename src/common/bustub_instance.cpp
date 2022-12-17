@@ -326,9 +326,9 @@ auto BustubInstance::ExecuteSqlTxn(const std::string &sql, ResultWriter &writer,
     // Execute the query.
     auto exec_ctx = MakeExecutorContext(txn);
     std::vector<Tuple> result_set{};
-    // fmt::print("{}:{}\n", __PRETTY_FUNCTION__, __LINE__);
-    // fmt::print(fmt::fg(fmt::color::medium_blue) | fmt::emphasis::bold, "txn {}\n{}\n", txn->GetTransactionId(),
-    //            optimized_plan->ToString());
+    fmt::print("{}:{}\n", __PRETTY_FUNCTION__, __LINE__);
+    fmt::print(fmt::fg(fmt::color::medium_blue) | fmt::emphasis::bold, "txn {}\n{}\n", txn->GetTransactionId(),
+               optimized_plan->ToString());
     is_successful &= execution_engine_->Execute(optimized_plan, &result_set, txn, exec_ctx.get());
 
     // Return the result set as a vector of string.

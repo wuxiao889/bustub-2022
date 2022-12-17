@@ -336,7 +336,8 @@ class LockManager {
    */
   auto UnlockRow(Transaction *txn, const table_oid_t &oid, const RID &rid) -> bool;
 
-  auto IsTableLocked(Transaction *txn, const table_oid_t &oid, const std::vector<LockMode> &lock_modes) -> bool;
+  auto IsTableLocked(Transaction *txn, const table_oid_t &oid, const std::vector<LockMode> &lock_modes)
+      -> std::optional<LockMode>;
 
   /*** Graph API ***/
 
@@ -423,4 +424,17 @@ class LockManager {
   std::mutex txn_variant_map_latch_;  //
 };
 
+/*
+
+Intention-Shared (IS)
+    → Indicates explicit locking at lower level with shared locks.
+
+Intention-Exclusive (IX)
+  → Indicates explicit locking at lower level with exclusive locks.
+
+Shared+Intention-Exclusive (SIX)
+  → The subtree rooted by that node is locked explicitly in
+  shared mode and explicit locking is being done at a
+  lower level with exclusive-mode locks.
+*/
 }  // namespace bustub

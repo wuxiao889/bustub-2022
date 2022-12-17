@@ -54,7 +54,7 @@ class SeqScanExecutor : public AbstractExecutor {
  private:
   /** The sequential scan plan node to be executed */
   const SeqScanPlanNode *plan_;
-  TableInfo *table_info_;
+  const TableInfo *table_info_;
   TableIterator cur_;
   page_id_t cur_page_id_;
 

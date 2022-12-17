@@ -42,7 +42,7 @@ auto InsertExecutor::Next(Tuple *tuple, RID *rid) -> bool {
   Tuple child_tuple{};
   const auto &ctx = GetExecutorContext();
   const auto &txn = exec_ctx_->GetTransaction();
-  const auto oid = plan_->table_oid_;
+  const auto &oid = plan_->table_oid_;
   const auto &table_info = ctx->GetCatalog()->GetTable(oid);
 
   int cnt = 0;
@@ -53,7 +53,7 @@ auto InsertExecutor::Next(Tuple *tuple, RID *rid) -> bool {
     if (status) {
       cnt++;
       std::vector<IndexInfo *> index_infos = exec_ctx_->GetCatalog()->GetTableIndexes(table_info->name_);
-      for (auto index_info : index_infos) {
+      for (const auto &index_info : index_infos) {
         auto new_key = child_tuple.KeyFromTuple(table_info->schema_, *index_info->index_->GetKeySchema(),
                                                 index_info->index_->GetKeyAttrs());
         // fmt::print("key {}\n", new_key.ToString(&index_info->key_schema_));
@@ -71,35 +71,40 @@ auto InsertExecutor::Next(Tuple *tuple, RID *rid) -> bool {
 void InsertExecutor::LockTable() {
   const auto &lock_mgr = exec_ctx_->GetLockManager();
   const auto &txn = exec_ctx_->GetTransaction();
-  const auto oid = plan_->table_oid_;
+  const auto &oid = plan_->table_oid_;
   try {
     bool res = true;
     if (txn->GetIsolationLevel() != IsolationLevel::READ_UNCOMMITTED) {
       if (!txn->IsTableSharedIntentionExclusiveLocked(oid)) {
-        res = lock_mgr->LockTable(exec_ctx_->GetTransaction(), LockManager::LockMode::INTENTION_EXCLUSIVE, oid);
+        res = lock_mgr->LockTable(txn, LockManager::LockMode::INTENTION_EXCLUSIVE, oid);
       }
     } else {
-      res = lock_mgr->LockTable(exec_ctx_->GetTransaction(), LockManager::LockMode::INTENTION_EXCLUSIVE, oid);
+      res = lock_mgr->LockTable(txn, LockManager::LockMode::INTENTION_EXCLUSIVE, oid);
     }
     if (!res) {
       assert(txn->GetState() == TransactionState::ABORTED);
-      throw ExecutionException("InsertExecutor::Init() lock fail");
+      throw ExecutionException("InsertExecutor::LockTable fail");
     }
   } catch (TransactionAbortException &e) {
     assert(txn->GetState() == TransactionState::ABORTED);
-    throw ExecutionException("DeleteExecutor::Init() lock fail");
+    throw ExecutionException("InsertExecutor::LockTable fail");
   }
 }
 
 void InsertExecutor::LockRow(const RID &rid) {
   const auto &txn = exec_ctx_->GetTransaction();
   const auto &lock_mgr = exec_ctx_->GetLockManager();
-  const auto oid = plan_->table_oid_;
-  bool res = true;
-  res = lock_mgr->LockRow(txn, LockManager::LockMode::EXCLUSIVE, oid, rid);
-  if (!res) {
-    txn->SetState(TransactionState::ABORTED);
-    throw ExecutionException("InsertExecutor::Next() lock fail");
+  const auto &oid = plan_->table_oid_;
+  try {
+    bool res = true;
+    res = lock_mgr->LockRow(txn, LockManager::LockMode::EXCLUSIVE, oid, rid);
+    if (!res) {
+      txn->SetState(TransactionState::ABORTED);
+      throw ExecutionException("InsertExecutor::LockRow fail");
+    }
+  } catch (TransactionAbortException &e) {
+    assert(txn->GetState() == TransactionState::ABORTED);
+    throw ExecutionException("InsertExecutor::LockRow fail");
   }
 }
 

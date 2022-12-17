@@ -248,7 +248,4 @@ TEST(LockManagerTest, Readcommited) {
   t1.join();
 }
 
-
-
-
 }  // namespace bustub

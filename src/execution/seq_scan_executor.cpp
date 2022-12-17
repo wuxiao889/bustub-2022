@@ -26,14 +26,13 @@ SeqScanExecutor::SeqScanExecutor(ExecutorContext *exec_ctx, const SeqScanPlanNod
       cur_page_id_(INVALID_PAGE_ID) {}
 
 void SeqScanExecutor::Init() {
-  const auto &txn = exec_ctx_->GetTransaction();
-  cur_ = table_info_->table_->Begin(txn);
+  cur_ = table_info_->table_->Begin(exec_ctx_->GetTransaction());
   cur_page_id_ = INVALID_PAGE_ID;
   LockTable();
 }
 
 auto SeqScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
-  auto end = table_info_->table_->End();
+  const auto &end = table_info_->table_->End();
   const auto &bpm = exec_ctx_->GetBufferPoolManager();
 
   while (cur_ != end) {
@@ -77,7 +76,7 @@ auto SeqScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
 void SeqScanExecutor::LockTable() {
   const auto &txn = exec_ctx_->GetTransaction();
   const auto &lock_mgr = exec_ctx_->GetLockManager();
-  const auto oid = plan_->table_oid_;
+  const auto &oid = plan_->table_oid_;
   bool res = true;
 
   try {
@@ -99,7 +98,7 @@ void SeqScanExecutor::LockTable() {
 void SeqScanExecutor::UnLockTable() {
   const auto &txn = exec_ctx_->GetTransaction();
   const auto &lock_mgr = exec_ctx_->GetLockManager();
-  const auto oid = plan_->GetTableOid();
+  const auto &oid = plan_->GetTableOid();
   if (txn->GetIsolationLevel() == IsolationLevel::READ_COMMITTED) {
     if (txn->IsTableSharedLocked(oid)) {
       lock_mgr->UnlockTable(txn, oid);
@@ -110,7 +109,7 @@ void SeqScanExecutor::UnLockTable() {
 void SeqScanExecutor::LockRow(const RID &rid) {
   const auto &txn = exec_ctx_->GetTransaction();
   const auto &lock_mgr = exec_ctx_->GetLockManager();
-  const auto oid = plan_->GetTableOid();
+  const auto &oid = plan_->GetTableOid();
   bool res = true;
   if (txn->GetIsolationLevel() != IsolationLevel::READ_UNCOMMITTED) {
     if (!txn->IsRowExclusiveLocked(oid, rid)) {
@@ -126,7 +125,7 @@ void SeqScanExecutor::LockRow(const RID &rid) {
 void SeqScanExecutor::UnLockRow(const RID &rid) {
   const auto &txn = exec_ctx_->GetTransaction();
   const auto &lock_mgr = exec_ctx_->GetLockManager();
-  const auto oid = plan_->GetTableOid();
+  const auto &oid = plan_->GetTableOid();
   if (txn->GetIsolationLevel() == IsolationLevel::READ_COMMITTED) {
     if (txn->IsRowSharedLocked(oid, rid)) {
       lock_mgr->UnlockRow(txn, oid, rid);

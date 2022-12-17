@@ -215,6 +215,7 @@ Makefile.config
 
 # build, distribute, and bins (+ python proto bindings)
 build-vscode
+build-lock1
 build_debug/*
 .build_debug/*
 .build_release/*
