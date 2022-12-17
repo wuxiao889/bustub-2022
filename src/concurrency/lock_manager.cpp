@@ -18,25 +18,64 @@
 #include <algorithm>
 #include <bitset>
 #include <cassert>
+#include <chrono>  // NOLINT
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #include <functional>
 #include <initializer_list>
 #include <iterator>
 #include <memory>
 #include <mutex>  // NOLINT
 #include <optional>
+#include <ostream>
 #include <vector>
 
+#include <fmt/chrono.h>  // NOLINT
+#include <fmt/format.h>  // NOLINT
 #include "catalog/column.h"
 #include "catalog/table_generator.h"
 #include "common/config.h"
 #include "common/logger.h"
+#include "common/rid.h"
 #include "concurrency/transaction.h"
 #include "concurrency/transaction_manager.h"
 #include "fmt/color.h"
 #include "fmt/core.h"
 #include "fmt/ranges.h"
+
+// #define LOGT
+// #define LOGR
+// #define LOGC
+
+void Vlog(const char *file, int line, const char *func, fmt::string_view format, fmt::format_args args) {
+  fmt::print("{}:{} {:<12}-{:%H:%M:%S} {}: {}\n", file, line, func, fmt::localtime(std::time(nullptr)), ::gettid(),
+             fmt::vformat(format, args));
+  // fmt::vprint(format, args);
+}
+
+template <typename S, typename... Args>
+void Log(const char *file, int line, const char *func, const S &format, Args &&...args) {
+  Vlog(file, line, func, format, fmt::make_format_args(args...));
+}
+
+#ifdef LOGT
+#define MY_LOGT(format, ...) Log(__FILE__, __LINE__, __FUNCTION__, FMT_STRING(format), __VA_ARGS__)
+#else
+#define MY_LOGT(format, ...) ((void)0)
+#endif
+
+#ifdef LOGR
+#define MY_LOGR(format, ...) Log(__FILE__, __LINE__, __FUNCTION__, FMT_STRING(format), __VA_ARGS__)
+#else
+#define MY_LOGR(format, ...) ((void)0)
+#endif
+
+#ifdef LOGC
+#define MY_LOGC(format, ...) Log(__FILE__, __LINE__, __FUNCTION__, FMT_STRING(format), __VA_ARGS__)
+#else
+#define MY_LOGC(format, ...) ((void)0)
+#endif
 
 namespace bustub {
 
@@ -49,31 +88,29 @@ namespace bustub {
 auto LockModeToString(LockManager::LockMode lock_mode) -> std::string {
   switch (lock_mode) {
     case LockManager::LockMode::SHARED:
-      return "SHARED";
+      return "S";
     case LockManager::LockMode::EXCLUSIVE:
-      return "EXCLUSIVE";
+      return "X";
     case LockManager::LockMode::INTENTION_SHARED:
-      return "INTENTION_SHARED";
+      return "IS";
     case LockManager::LockMode::INTENTION_EXCLUSIVE:
-      return "INTENTION_EXCLUSIVE";
+      return "IX";
     case LockManager::LockMode::SHARED_INTENTION_EXCLUSIVE:
-      return "SHARED_INTENTION_EXCLUSIVE";
+      return "SIX";
   }
-  return "";
 }
 
 auto IsolationLevelToString(IsolationLevel isolation_level) -> std::string {
   switch (isolation_level) {
     case IsolationLevel::READ_UNCOMMITTED:
-      return "READ_UNCOMMITTED";
+      return "RU";
       break;
     case IsolationLevel::REPEATABLE_READ:
-      return "REPEATABLE_READ";
+      return "RR";
       break;
     case IsolationLevel::READ_COMMITTED:
-      return "READ_COMMITTED";
+      return "RC";
   }
-  return "";
 }
 
 /*
@@ -225,8 +262,7 @@ auto LockManager::LockTable(Transaction *txn, LockMode lock_mode, const table_oi
   txn_variant_map_[txn_id] = oid;
   txn_variant_map_latch_.unlock();
 
-  // LOG_DEBUG("\033[0;34m%d: txn %d locktable %d %s\033[0m\n", ::gettid(), txn_id, oid,
-  //           LockModeToString(lock_mode).c_str());
+  MY_LOGT("txn {} {} locktable   {} {:^5}", txn_id, txn_level, oid, lock_mode);
 
   if (table_lock_map_it != table_lock_map_.end()) {
     lrque = table_lock_map_it->second;
@@ -286,8 +322,7 @@ auto LockManager::LockTable(Transaction *txn, LockMode lock_mode, const table_oi
           txn->GetSharedIntentionExclusiveTableLockSet()->erase(oid);
           break;
       }
-      // LOG_DEBUG("\033[0;34m%d: txn %d locktable %d  %s -> %s \033[0m\n", ::gettid(), txn_id, oid,
-      //           LockModeToString(old_lock_mode.value()).c_str(), LockModeToString(lock_mode).c_str());
+      MY_LOGT("txn {} {} locktable   {} {} -> {}", txn_id, txn_level, oid, old_lock_mode.value(), lock_mode);
     } else {
       request_it = request_queue.insert(request_queue.end(), lock_request);
     }
@@ -308,10 +343,6 @@ auto LockManager::LockTable(Transaction *txn, LockMode lock_mode, const table_oi
     if (upgrade) {
       lrque->upgrading_ = INVALID_TXN_ID;
     }
-
-    // fmt::print(fmt::fg(fmt::color::blue) | fmt::emphasis::bold, "{} {} granted {}\n", ::gettid(), txn_id,
-    //            request_queue);
-
   } else {
     lrque = std::make_shared<LockRequestQueue>();
     table_lock_map_[oid] = lrque;
@@ -320,8 +351,7 @@ auto LockManager::LockTable(Transaction *txn, LockMode lock_mode, const table_oi
     table_lock_map_latch_.unlock();
   }
 
-  // LOG_DEBUG("\033[0;44m%d: txn %d locktable %d %s success\033[0m\n", ::gettid(), txn_id, oid,
-  //           LockModeToString(lock_mode).c_str());
+  MY_LOGT("txn {} {} locktable   {} {:^5} SUCCESS", txn_id, txn_level, oid, lock_mode);
 
   switch (lock_mode) {
     case LockMode::SHARED:
@@ -369,7 +399,9 @@ auto LockManager::UnlockTable(Transaction *txn, const table_oid_t &oid) -> bool 
   }
 
   table_lock_map_latch_.lock();
-  // LOG_DEBUG("\033[0;32m%d: txn %d unlocktable %d\033[0m\n", ::gettid(), txn_id, oid);
+
+  MY_LOGT("txn {} {} unlocktable {}", txn_id, txn_level, oid);
+
   auto table_lock_map_it = table_lock_map_.find(oid);
   assert(table_lock_map_it != table_lock_map_.end());
 
@@ -390,7 +422,7 @@ auto LockManager::UnlockTable(Transaction *txn, const table_oid_t &oid) -> bool 
     lrque->cv_.notify_all();
   }
 
-  // LOG_DEBUG("\033[0;42m%d: txn %d unlocktable %d success\033[0m\n", ::gettid(), txn_id, oid);
+  MY_LOGT("txn {} {} unlocktable {} {:^5} SUCCESS", txn_id, txn_level, oid, lock_mode);
 
   // TRANSACTION STATE UPDATE
   if (txn->GetState() == TransactionState::GROWING) {
@@ -512,8 +544,9 @@ auto LockManager::LockRow(Transaction *txn, LockMode lock_mode, const table_oid_
   //       X, IX, or SIX on the table.
 
   row_lock_map_latch_.lock();
-  // LOG_DEBUG("\033[0;33m%d: txn %d table %d lockrow [%d,%d] %s\033[0m\n", ::gettid(), txn_id, oid, rid.GetPageId(),
-  // rid.GetSlotNum(), LockModeToString(lock_mode).c_str());
+
+  MY_LOGR("txn {} {} table {} lockrow {} {}", txn_id, txn_level, oid, rid, lock_mode);
+
   auto row_lock_map_it = row_lock_map_.find(rid);
   std::shared_ptr<LockRequestQueue> lrque;
 
@@ -550,8 +583,9 @@ auto LockManager::LockRow(Transaction *txn, LockMode lock_mode, const table_oid_
 
       txn->GetSharedLockSet()->erase(rid);
       txn->GetSharedRowLockSet()->at(oid).erase(rid);
-      // LOG_DEBUG("\033[0;33m%d: txn %d table %d lockrow [%d,%d] SHARED -> EXCLUSIVE \033[0m\n", ::gettid(), txn_id, oid,
-      //           rid.GetPageId(), rid.GetSlotNum());
+
+      MY_LOGR("txn {} {} table {} lockrow {} UPGRADE", txn_id, txn_level, oid, rid);
+
     } else {
       request_it = request_queue.insert(request_queue.end(), lock_request);
     }
@@ -561,8 +595,8 @@ auto LockManager::LockRow(Transaction *txn, LockMode lock_mode, const table_oid_
     });
 
     if (txn->GetState() == TransactionState::ABORTED) {
-      LOG_WARN("\033[0;41m%d: txn %d table %d lockrow [%d,%d] %s abort\033[0m\n", ::gettid(), txn_id, oid,
-               rid.GetPageId(), rid.GetSlotNum(), LockModeToString(lock_mode).c_str());
+      // LOG_WARN("\033[0;41m%d: txn %d table %d lockrow [%d,%d] %s abort\033[0m\n", ::gettid(), txn_id, oid,
+      //          rid.GetPageId(), rid.GetSlotNum(), LockModeToString(lock_mode).c_str());
       request_queue.erase(request_it);
       return false;
     }
@@ -579,8 +613,7 @@ auto LockManager::LockRow(Transaction *txn, LockMode lock_mode, const table_oid_
     row_lock_map_latch_.unlock();
   }
 
-  // LOG_DEBUG("\033[0;43m%d: txn %d table %d lockrow [%d,%d] %s success\033[0m\n", ::gettid(), txn_id, oid,
-  //           rid.GetPageId(), rid.GetSlotNum(), LockModeToString(lock_mode).c_str());
+  MY_LOGR("txn {} {} table {} lockrow {} {} SUCCESS", txn_id, txn_level, oid, rid, lock_mode);
 
   std::shared_ptr<std::unordered_map<table_oid_t, std::unordered_set<RID>>> lock_set;
   if (lock_mode == LockMode::SHARED) {
@@ -606,8 +639,9 @@ auto LockManager::UnlockRow(Transaction *txn, const table_oid_t &oid, const RID 
   }
 
   row_lock_map_latch_.lock();
-  // LOG_DEBUG("\033[0;35m%d: txn %d table %d unlockrow [%d,%d]\033[0m\n", ::gettid(), txn_id, oid, rid.GetPageId(),
-  //           rid.GetSlotNum());
+
+  MY_LOGR("txn {} {} table {} unlockrow {}", txn_id, txn_level, oid, rid);
+
   auto row_lock_map_it = row_lock_map_.find(rid);
   assert(row_lock_map_it != row_lock_map_.end());
   LockMode lock_mode;
@@ -621,9 +655,8 @@ auto LockManager::UnlockRow(Transaction *txn, const table_oid_t &oid, const RID 
     auto it = std::find_if(request_queue.begin(), request_queue.end(),
                            [txn_id](const auto &lock_request) { return lock_request->txn_id_ == txn_id; });
     assert(it != request_queue.end() && (*it)->granted_);
-    // LOG_DEBUG("\033[0;45m%d: txn %d table %d unlockrow [%d,%d] success\033[0m\n", ::gettid(), txn_id, oid,
-    //           rid.GetPageId(), rid.GetSlotNum());
     lock_mode = it->get()->lock_mode_;
+    MY_LOGR("txn {} {} table {} unlockrow {} {} SUCCESS", txn_id, txn_level, oid, rid, lock_mode);
     request_queue.erase(it);
     lrque->cv_.notify_all();
   }
@@ -733,13 +766,15 @@ auto LockManager::HasCycle(txn_id_t *txn_id) -> bool {
 }
 
 void LockManager::RunCycleDetection() {
+  static size_t round = 0;
+  (void)(round);
   while (enable_cycle_detection_) {
     std::this_thread::sleep_for(cycle_detection_interval);
     {
       std::lock_guard lock(waits_for_latch_);
       table_lock_map_latch_.lock();
       row_lock_map_latch_.lock();
-      // LOG_DEBUG("\033[0;31m %d RunCycleDetection\033[0m\n", ::gettid());
+      MY_LOGC("RunCycleDetection round {}", round);
 
       auto add_edges = [&](const auto &map) {
         for (const auto &[oid, que] : map) {
@@ -771,9 +806,9 @@ void LockManager::RunCycleDetection() {
       add_edges(table_lock_map_);
       add_edges(row_lock_map_);
 
-      // This means when choosing which unexplored node to run DFS from, always choose the node with the lowest
-      // transaction id.
-      // This also means when exploring neighbors, explore them in sorted order from lowest to highest.
+      // This means when choosing which unexplored node to run DFS from, always choose the node with the
+      // lowest transaction id. This also means when exploring neighbors, explore them in sorted order from
+      // lowest to highest.
       auto remove_edges = [&](const auto &que, const auto &t1) {
         std::vector<txn_id_t> granted;
         for (const auto &lock_request : que->request_queue_) {
@@ -807,6 +842,7 @@ void LockManager::RunCycleDetection() {
         } else {
           const auto rid = std::get<RID>(txn_variant_map_[txn_id]);
           txn_variant_map_latch_.unlock();
+          MY_LOGC("abort {} waits for tuple {}", txn_id, rid);
           // LOG_WARN("\033[0;31m abort txn %d waits for tuple [%d,%d]\033[0m;\n", txn_id, rid.GetPageId(),
           //          rid.GetSlotNum());
           auto &lock_request_que = row_lock_map_[rid];
@@ -815,12 +851,11 @@ void LockManager::RunCycleDetection() {
         }
       }
 
+      MY_LOGC("CycleDetection finish round {}", round++);
       row_lock_map_latch_.unlock();
       table_lock_map_latch_.unlock();
-
       waits_.clear();
       waits_for_.clear();
-      // LOG_DEBUG("\033[0;31m %d CycleDetection finish\033[0m\n", ::gettid());
     }
   }
 }
@@ -884,6 +919,14 @@ struct fmt::formatter<std::shared_ptr<T>,
   template <typename FormatCtx>
   auto format(const std::shared_ptr<T> &x, FormatCtx &ctx) const {
     return fmt::formatter<std::string>::format(x->ToString(), ctx);
+  }
+};
+
+template <>
+struct fmt::formatter<bustub::RID> : formatter<string_view> {
+  template <typename FormatContext>
+  auto format(bustub::RID rid, FormatContext &ctx) const {
+    return formatter<string_view>::format(fmt::format("[{},{}]", rid.GetPageId(), rid.GetSlotNum()), ctx);
   }
 };
 
