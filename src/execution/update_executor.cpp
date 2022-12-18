@@ -71,7 +71,7 @@ void UpdateExecutor::LockTable() {
   try {
     bool res = true;
     if (txn->GetIsolationLevel() != IsolationLevel::READ_UNCOMMITTED) {
-      res = lock_mgr->LockTable(exec_ctx_->GetTransaction(), LockManager::LockMode::SHARED_INTENTION_EXCLUSIVE, oid);
+      res = lock_mgr->LockTable(exec_ctx_->GetTransaction(), LockManager::LockMode::INTENTION_EXCLUSIVE, oid);
     }
     if (!res) {
       assert(txn->GetState() == TransactionState::ABORTED);

@@ -10,7 +10,7 @@
 //===----------------------------------------------------------------------===//
 #pragma once
 
-#include <mutex>    // NOLINT
+#include <mutex>  // NOLINT
 #include <queue>
 #include <string>
 #include <utility>
