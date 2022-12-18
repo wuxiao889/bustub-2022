@@ -6,6 +6,7 @@
 
 #include "buffer/buffer_pool_manager.h"
 #include "common/config.h"
+#include "storage/index/b_plus_tree_index.h"
 #include "storage/index/index_iterator.h"
 #include "storage/page/b_plus_tree_page.h"
 #include "storage/page/page.h"
@@ -32,7 +33,7 @@ INDEX_TEMPLATE_ARGUMENTS
 INDEXITERATOR_TYPE::~IndexIterator() = default;
 
 INDEX_TEMPLATE_ARGUMENTS
-auto INDEXITERATOR_TYPE::IsEnd() -> bool { return true; }
+auto INDEXITERATOR_TYPE::IsEnd() -> bool { return *this == IndexIterator{}; }
 
 INDEX_TEMPLATE_ARGUMENTS
 auto INDEXITERATOR_TYPE::operator*() -> const MappingType & {
@@ -48,7 +49,7 @@ auto INDEXITERATOR_TYPE::operator++() -> INDEXITERATOR_TYPE & {
   auto node = reinterpret_cast<LeafPage *>(page->GetData());
 
   if (++position_ != node->GetSize()) {
-    value_ = (*node)[position_];
+    value_ = node->GetKeyValue(position_);
     page->RUnlatch();
     buffer_pool_manager_->UnpinPage(page_id_, false);
     return *this;
@@ -71,7 +72,7 @@ auto INDEXITERATOR_TYPE::operator++() -> INDEXITERATOR_TYPE & {
   page_id_ = page->GetPageId();
   position_ = 0;
   node = reinterpret_cast<LeafPage *>(page->GetData());
-  value_ = (*node)[position_];
+  value_ = node->GetKeyValue(position_);
   page->RUnlatch();
   buffer_pool_manager_->UnpinPage(page_id_, false);
 

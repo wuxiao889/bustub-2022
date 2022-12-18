@@ -10,6 +10,7 @@
 //===----------------------------------------------------------------------===//
 #pragma once
 
+#include <mutex>    // NOLINT
 #include <queue>
 #include <string>
 #include <utility>
@@ -45,7 +46,7 @@ class BPlusTree {
   using Iterator = IndexIterator<KeyType, ValueType, KeyComparator>;
 
   friend class IndexIterator<KeyType, ValueType, KeyComparator>;
-  enum Operation { FIND, INSERT, REMOVE };
+  enum class OpeType { FIND, INSERT, REMOVE };
 
  public:
   explicit BPlusTree(std::string name, BufferPoolManager *buffer_pool_manager, const KeyComparator &comparator,
@@ -86,17 +87,17 @@ class BPlusTree {
   auto GetLevel() const -> int;
 
  private:
-  auto IsSafe(BPlusTreePage *node, Operation operation) -> bool;
+  auto IsSafe(BPlusTreePage *node, OpeType operation) -> bool;
 
-  auto FindLeafPage(const KeyType &key, Operation operation, bool optimistic, bool &root_locked,
-                    Transaction *transaction) -> Page *;
+  auto FindLeafPage(const KeyType &key, OpeType operation, bool optimistic, bool &root_locked, Transaction *transaction)
+      -> Page *;
 
   auto InsertPessimistic(const KeyType &key, const ValueType &value, Transaction *transaction) -> bool;
   void InsertInParent(BPlusTreePage *left_node, BPlusTreePage *right_node, const KeyType &key, page_id_t value,
                       Transaction *transaction = nullptr);
 
   auto RemovePessimistic(const KeyType &key, Transaction *transaction);
-  auto RemoveInInternal(Page *page, bool &root_locked, Transaction *transaction) -> bool;
+  auto RemoveInParent(Page *page, bool &root_locked, Transaction *transaction) -> bool;
   void BorrowFromLeft(BPlusTreePage *node, BPlusTreePage *left_node, int left_position, Transaction *transaction);
   void BorrowFromRight(BPlusTreePage *node, BPlusTreePage *right_node, int left_position, Transaction *transaction);
   // always merge right to left
@@ -109,6 +110,7 @@ class BPlusTree {
 
   void UpdateChild(InternalPage *node, int first, int last);
 
+  void ClearAndUnlock(Transaction *transaction, bool &root_locked);
   void ClearPageSet(Transaction *transaction);
 
   auto CastBPlusPage(Page *page) const -> BPlusTreePage * { return reinterpret_cast<BPlusTreePage *>(page->GetData()); }
@@ -141,7 +143,16 @@ class BPlusTree {
   page_id_t left_most_;
   page_id_t right_most_;
 
-  std::mutex latch_;  // guard root_page / root_page_id
+  class RootMutex {
+   public:
+    inline void Latch();
+    inline void UnLatch();
+
+   private:
+    std::mutex latch_;
+  };
+
+  RootMutex root_latch_;  // guard root_page / root_page_id
 };
 
 }  // namespace bustub

@@ -80,7 +80,7 @@ auto BufferPoolManagerInstance::NewPgImp(page_id_t *page_id) -> Page * {
     page->pin_count_++;
     // LOG_DEBUG("page %d pin_count +1 = %d", *page_id, page->pin_count_);
   }
-  // LOG_INFO("%d new page %d", ::getpid(), *page_id);
+  // LOG_INFO("new page %d", *page_id);
   return page;
 }
 
@@ -96,7 +96,7 @@ auto BufferPoolManagerInstance::FetchPgImp(page_id_t page_id) -> Page * {
     replacer_->RecordAccess(frame_id);
     replacer_->SetEvictable(frame_id, false);
     page->pin_count_++;
-    // LOG_INFO("%d fetch page %d pin_count %d", ::getpid(), page_id, page->pin_count_);
+    // LOG_INFO("fetch page %d pin_count %d", page_id, page->pin_count_);
     // LOG_DEBUG("page %d pin_count +1 = %d", page_id, page->pin_count_);
     return page;
   }
@@ -140,13 +140,13 @@ auto BufferPoolManagerInstance::UnpinPgImp(page_id_t page_id, bool is_dirty) -> 
   frame_id_t frame_id = -1;
   // If page_id is not in the buffer pool
   if (!page_table_->Find(page_id, frame_id)) {
-    // LOG_WARN("\033[1;31m %d page %d unpin false! \033[0m", ::getpid(), page_id);
+    // LOG_WARN("\033[1;31m page %d unpin false! \033[0m", page_id);
     return false;
   }
   Page *page = pages_ + frame_id;
   // its pin count is already 0, return false.
   if (page->pin_count_ <= 0) {
-    // LOG_WARN("\033[1;31m %d page %d pin_count already <= 0! \033[0m", ::getpid(), page_id);
+    // LOG_WARN("\033[1;31m page %d pin_count already <= 0! \033[0m" page_id);
     // assert(false);
     return false;
   }
@@ -160,7 +160,7 @@ auto BufferPoolManagerInstance::UnpinPgImp(page_id_t page_id, bool is_dirty) -> 
     // LOG_DEBUG("page %d pin_count %d evitable!", page_id, page->pin_count_);
     replacer_->SetEvictable(frame_id, true);
   }
-  // LOG_INFO("%d unpin page %d pin_count %d", ::getpid(), page_id, page->pin_count_);
+  // LOG_INFO("unpin page %d pin_count %d",  page_id, page->pin_count_);
   return true;
 }
 
@@ -203,7 +203,7 @@ auto BufferPoolManagerInstance::DeletePgImp(page_id_t page_id) -> bool {
   Page *page = pages_ + frame_id;
   // If the page is pinned and cannot be deleted, return false immediately.
   if (page->pin_count_ > 0) {
-    // LOG_WARN("\033[1;31m %d page %d pin_count %d !\033[0m", ::getpid(), page_id, page->pin_count_);
+    // LOG_WARN("\033[1;31m page %d pin_count %d !\033[0m",  page_id, page->pin_count_);
     // abort();
     return false;
   }
@@ -216,7 +216,7 @@ auto BufferPoolManagerInstance::DeletePgImp(page_id_t page_id) -> bool {
   // disk.
   ResetPage(page);
   DeallocatePage(page_id);
-  // LOG_INFO("\033[1;31m %d page %d delete!\033[0m", ::getpid(), page_id);
+  // LOG_INFO("\033[1;31m page %d delete!\033[0m",  page_id);
   return true;
 }
 

@@ -20,6 +20,14 @@
 #include "common/logger.h"
 #include "common/rwlatch.h"
 
+// #define LOGPAGE
+
+#ifdef LOGPAGE
+#define MY_LOGP(...) LOG_DEBUG(__VA_ARGS__);
+#else
+#define MY_LOGP(...) ((void)0)
+#endif
+
 namespace bustub {
 
 /**
@@ -53,24 +61,24 @@ class Page {
   /** Acquire the page write latch. */
   inline void WLatch() {
     rwlatch_.WLock();
-    // LOG_DEBUG("%d page %d WLatch %d\n", ::gettid(), page_id_, pin_count_);
+    MY_LOGP(RED("page %d WLatch pin %d"), page_id_, pin_count_);
   }
 
   /** Release the page write latch. */
   inline void WUnlatch() {
-    // LOG_DEBUG("%d page %d WUnlatch() %d\n", ::gettid(), page_id_, pin_count_ - 1);
+    MY_LOGP(GREEN("page %d WUnlatch pin %d"), page_id_, pin_count_ - 1);
     rwlatch_.WUnlock();
   }
 
   /** Acquire the page read latch. */
   inline void RLatch() {
     rwlatch_.RLock();
-    // LOG_DEBUG("%d page %d RLatch() %d\n", ::gettid(), page_id_, pin_count_);
+    MY_LOGP(YELLOW("page %d RLatch pin %d"), page_id_, pin_count_);
   }
 
   /** Release the page read latch. */
   inline void RUnlatch() {
-    // LOG_DEBUG("%d page %d RUnlatch()%d\n", ::gettid(), page_id_, pin_count_ - 1);
+    MY_LOGP(BLUE("page %d RUnlatch pin %d"), page_id_, pin_count_ - 1);
     rwlatch_.RUnlock();
   }
 

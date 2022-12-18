@@ -44,42 +44,41 @@
 #include "fmt/core.h"
 #include "fmt/ranges.h"
 
-// #define LOGT
-// #define LOGR
-// #define LOGC
+// #define LOGTABLE
+// #define LOGROW
+// #define LOGCYCLE
 
-void Vlog(const char *file, int line, const char *func, fmt::string_view format, fmt::format_args args) {
-  fmt::print("{}:{} {:<12}-{:%H:%M:%S} {}: {}\n", file, line, func, fmt::localtime(std::time(nullptr)), ::gettid(),
+void Vlog(const char *file, int line, fmt::string_view format, fmt::format_args args) {
+  fmt::print("{:%Y-%m-%d %H:%M:%S} [{}:{}] tid {}: {}\n", fmt::localtime(std::time(nullptr)), file, line, ::gettid(),
              fmt::vformat(format, args));
-  // fmt::vprint(format, args);
 }
 
 template <typename S, typename... Args>
-void Log(const char *file, int line, const char *func, const S &format, Args &&...args) {
-  Vlog(file, line, func, format, fmt::make_format_args(args...));
+void Log(const char *file, int line, const S &format, Args &&...args) {
+  Vlog(file, line, format, fmt::make_format_args(args...));
 }
 
-#ifdef LOGT
-#define MY_LOGT(format, ...) Log(__FILE__, __LINE__, __FUNCTION__, FMT_STRING(format), __VA_ARGS__)
+#ifdef LOGTABLE
+#define MY_LOGT(format, ...) Log(__FILE__, __LINE__, FMT_STRING(format), __VA_ARGS__)
 #else
 #define MY_LOGT(format, ...) ((void)0)
 #endif
 
-#ifdef LOGR
-#define MY_LOGR(format, ...) Log(__FILE__, __LINE__, __FUNCTION__, FMT_STRING(format), __VA_ARGS__)
+#ifdef LOGROW
+#define MY_LOGR(format, ...) Log(__FILE__, __LINE__, FMT_STRING(format), __VA_ARGS__)
 #else
 #define MY_LOGR(format, ...) ((void)0)
 #endif
 
-#ifdef LOGC
-#define MY_LOGC(format, ...) Log(__FILE__, __LINE__, __FUNCTION__, FMT_STRING(format), __VA_ARGS__)
+#ifdef LOGCYCLE
+#define MY_LOGC(format, ...) Log(__FILE__, __LINE__, FMT_STRING(format), __VA_ARGS__)
 #else
 #define MY_LOGC(format, ...) ((void)0)
 #endif
 
 namespace bustub {
 
-#define ALLLOCK                                                                                                        \
+#define ANYLOCK                                                                                                        \
   {                                                                                                                    \
     LockMode::INTENTION_SHARED, LockMode::INTENTION_EXCLUSIVE, LockMode::SHARED_INTENTION_EXCLUSIVE, LockMode::SHARED, \
         LockMode::EXCLUSIVE                                                                                            \
@@ -127,6 +126,7 @@ auto LockManager::LockRequestQueue::CheckCompatibility(LockMode lock_mode, ListT
   // check compatible with the locks that are currently held
   // dp
   int mask = 0;
+  assert(ite != request_queue_.end());
   ite++;
   // fmt::print(fmt::fg(fmt::color::orange_red), "check\n");
   for (auto it = request_queue_.begin(); it != ite; it++) {
@@ -189,7 +189,7 @@ auto LockManager::LockTable(Transaction *txn, LockMode lock_mode, const table_oi
       // No locks are allowed in the SHRINKING state
       if (txn_state == TransactionState::SHRINKING) {
         txn->SetState(TransactionState::ABORTED);
-        LOG_WARN("LOCK_ON_SHRINKING\n");
+        LOG_WARN("LOCK_ON_SHRINKING");
         throw TransactionAbortException(txn_id, AbortReason::LOCK_ON_SHRINKING);
       }
       break;
@@ -199,7 +199,7 @@ auto LockManager::LockTable(Transaction *txn, LockMode lock_mode, const table_oi
       if (txn_state == TransactionState::SHRINKING) {
         if (lock_mode != LockMode::INTENTION_SHARED && lock_mode != LockMode::SHARED) {
           txn->SetState(TransactionState::ABORTED);
-          LOG_WARN("LOCK_ON_SHRINKING\n");
+          LOG_WARN("LOCK_ON_SHRINKING");
           throw TransactionAbortException(txn_id, AbortReason::LOCK_ON_SHRINKING);
         }
       }
@@ -210,17 +210,17 @@ auto LockManager::LockTable(Transaction *txn, LockMode lock_mode, const table_oi
       if (lock_mode == LockMode::SHARED || lock_mode == LockMode::INTENTION_SHARED ||
           lock_mode == LockMode::SHARED_INTENTION_EXCLUSIVE) {
         txn->SetState(TransactionState::ABORTED);
-        LOG_WARN("LOCK_SHARED_ON_READ_UNCOMMITTED\n");
+        LOG_WARN("LOCK_SHARED_ON_READ_UNCOMMITTED");
         throw TransactionAbortException(txn_id, AbortReason::LOCK_SHARED_ON_READ_UNCOMMITTED);
       }
       if (txn_state == TransactionState::SHRINKING) {
         txn->SetState(TransactionState::ABORTED);
-        LOG_WARN("LOCK_ON_SHRINKINGE\n");
+        LOG_WARN("LOCK_ON_SHRINKINGE");
         throw TransactionAbortException(txn_id, AbortReason::LOCK_ON_SHRINKING);
       }
   }
 
-  auto old_lock_mode = IsTableLocked(txn, oid, ALLLOCK);
+  auto old_lock_mode = IsTableLocked(txn, oid, ANYLOCK);
 
   bool upgrade = false;
   if (old_lock_mode.has_value()) {
@@ -234,20 +234,20 @@ auto LockManager::LockTable(Transaction *txn, LockMode lock_mode, const table_oi
       case LockMode::INTENTION_EXCLUSIVE:
         if (lock_mode != LockMode::EXCLUSIVE && lock_mode != LockMode::SHARED_INTENTION_EXCLUSIVE) {
           txn->SetState(TransactionState::ABORTED);
-          LOG_WARN("INCOMPATIBLE_UPGRADE\n");
+          LOG_WARN("INCOMPATIBLE_UPGRADE");
           throw TransactionAbortException(txn_id, AbortReason::INCOMPATIBLE_UPGRADE);
         }
         break;
       case LockMode::SHARED_INTENTION_EXCLUSIVE:
         if (lock_mode != LockMode::EXCLUSIVE) {
           txn->SetState(TransactionState::ABORTED);
-          LOG_WARN("INCOMPATIBLE_UPGRADE\n");
+          LOG_WARN("INCOMPATIBLE_UPGRADE");
           throw TransactionAbortException(txn_id, AbortReason::INCOMPATIBLE_UPGRADE);
         }
         break;
       case LockMode::EXCLUSIVE:
         txn->SetState(TransactionState::ABORTED);
-        LOG_WARN("INCOMPATIBLE_UPGRADE\n");
+        LOG_WARN("INCOMPATIBLE_UPGRADE");
         throw TransactionAbortException(txn_id, AbortReason::INCOMPATIBLE_UPGRADE);
     }
     upgrade = true;
@@ -257,12 +257,11 @@ auto LockManager::LockTable(Transaction *txn, LockMode lock_mode, const table_oi
   auto table_lock_map_it = table_lock_map_.find(oid);
   std::shared_ptr<LockRequestQueue> lrque;
   auto lock_request = std::make_shared<LockRequest>(txn_id, lock_mode, oid);
-  // txn_time_map_[lock_request->txn_id_] = lock_request->timestamp_;
   txn_variant_map_latch_.lock();
   txn_variant_map_[txn_id] = oid;
   txn_variant_map_latch_.unlock();
 
-  MY_LOGT("txn {} {} locktable   {} {:^5}", txn_id, txn_level, oid, lock_mode);
+  MY_LOGT(YELLOW("txn {} {} locktable   {} {:^5}"), txn_id, txn_level, oid, lock_mode);
 
   if (table_lock_map_it != table_lock_map_.end()) {
     lrque = table_lock_map_it->second;
@@ -290,7 +289,7 @@ auto LockManager::LockTable(Transaction *txn, LockMode lock_mode, const table_oi
       //  SIX -> [X]
       if (lrque->upgrading_ != INVALID_TXN_ID) {
         txn->SetState(TransactionState::ABORTED);
-        LOG_WARN("UPGRADE_CONFLICT\n");
+        // LOG_WARN("UPGRADE_CONFLICT");
         throw TransactionAbortException(txn_id, AbortReason::UPGRADE_CONFLICT);
       }
 
@@ -322,7 +321,8 @@ auto LockManager::LockTable(Transaction *txn, LockMode lock_mode, const table_oi
           txn->GetSharedIntentionExclusiveTableLockSet()->erase(oid);
           break;
       }
-      MY_LOGT("txn {} {} locktable   {} {} -> {}", txn_id, txn_level, oid, old_lock_mode.value(), lock_mode);
+      MY_LOGT(BBLUE("txn {} {} locktable   {} {} -> {} UPGRADE"), txn_id, txn_level, oid, old_lock_mode.value(),
+              lock_mode);
     } else {
       request_it = request_queue.insert(request_queue.end(), lock_request);
     }
@@ -333,8 +333,6 @@ auto LockManager::LockTable(Transaction *txn, LockMode lock_mode, const table_oi
     });
 
     if (txn->GetState() == TransactionState::ABORTED) {
-      // LOG_DEBUG("\033[0;41m%d: txn %d locktable %d %s abort\033[0m\n", ::gettid(), txn_id, oid,
-      //           LockModeToString(lock_mode).c_str());
       request_queue.erase(request_it);
       return false;
     }
@@ -351,7 +349,7 @@ auto LockManager::LockTable(Transaction *txn, LockMode lock_mode, const table_oi
     table_lock_map_latch_.unlock();
   }
 
-  MY_LOGT("txn {} {} locktable   {} {:^5} SUCCESS", txn_id, txn_level, oid, lock_mode);
+  MY_LOGT(BYELLOW("txn {} {} locktable   {} {:^5} SUCCESS"), txn_id, txn_level, oid, lock_mode);
 
   switch (lock_mode) {
     case LockMode::SHARED:
@@ -385,25 +383,23 @@ auto LockManager::UnlockTable(Transaction *txn, const table_oid_t &oid) -> bool 
   if ((s_lock_set->find(oid) != s_lock_set->end() && !s_lock_set->at(oid).empty()) ||
       (x_lock_set->find(oid) != x_lock_set->end() && !x_lock_set->at(oid).empty())) {
     txn->SetState(TransactionState::ABORTED);
-    LOG_WARN("TABLE_UNLOCKED_BEFORE_UNLOCKING_ROWS\n");
+    LOG_WARN("TABLE_UNLOCKED_BEFORE_UNLOCKING_ROWS");
     throw TransactionAbortException(txn_id, AbortReason::TABLE_UNLOCKED_BEFORE_UNLOCKING_ROWS);
   }
 
   // Both should ensure that the transaction currently
   // holds a lock on the resource it is attempting to unlock.
-  if (!IsTableLocked(txn, oid, ALLLOCK)) {
+  if (!IsTableLocked(txn, oid, ANYLOCK)) {
     table_lock_map_latch_.unlock();
     txn->SetState(TransactionState::ABORTED);
-    LOG_WARN("ATTEMPTED_UNLOCK_BUT_NO_LOCK_HELD\n");
+    LOG_WARN("ATTEMPTED_UNLOCK_BUT_NO_LOCK_HELD");
     throw TransactionAbortException(txn_id, AbortReason::ATTEMPTED_UNLOCK_BUT_NO_LOCK_HELD);
   }
 
   table_lock_map_latch_.lock();
-
-  MY_LOGT("txn {} {} unlocktable {}", txn_id, txn_level, oid);
-
   auto table_lock_map_it = table_lock_map_.find(oid);
   assert(table_lock_map_it != table_lock_map_.end());
+  MY_LOGT(BGREEN("txn {} {} unlocktable {}"), txn_id, txn_level, oid);
 
   {
     auto &lrque = table_lock_map_it->second;
@@ -421,8 +417,6 @@ auto LockManager::UnlockTable(Transaction *txn, const table_oid_t &oid) -> bool 
     // for the resource (if possible).
     lrque->cv_.notify_all();
   }
-
-  MY_LOGT("txn {} {} unlocktable {} {:^5} SUCCESS", txn_id, txn_level, oid, lock_mode);
 
   // TRANSACTION STATE UPDATE
   if (txn->GetState() == TransactionState::GROWING) {
@@ -470,7 +464,7 @@ auto LockManager::LockRow(Transaction *txn, LockMode lock_mode, const table_oid_
   if (lock_mode == LockMode::INTENTION_EXCLUSIVE || lock_mode == LockMode::INTENTION_SHARED ||
       lock_mode == LockMode::SHARED_INTENTION_EXCLUSIVE) {
     txn->SetState(TransactionState::ABORTED);
-    LOG_WARN("ATTEMPTED_INTENTION_LOCK_ON_ROW\n");
+    LOG_WARN("ATTEMPTED_INTENTION_LOCK_ON_ROW");
     throw TransactionAbortException(txn_id, AbortReason::ATTEMPTED_INTENTION_LOCK_ON_ROW);
   }
 
@@ -480,7 +474,7 @@ auto LockManager::LockRow(Transaction *txn, LockMode lock_mode, const table_oid_
       // No locks are allowed in the SHRINKING state
       if (txn_state == TransactionState::SHRINKING) {
         txn->SetState(TransactionState::ABORTED);
-        LOG_WARN("LOCK_ON_SHRINKING\n");
+        LOG_WARN("LOCK_ON_SHRINKING");
         throw TransactionAbortException(txn_id, AbortReason::LOCK_ON_SHRINKING);
       }
       break;
@@ -490,7 +484,7 @@ auto LockManager::LockRow(Transaction *txn, LockMode lock_mode, const table_oid_
       if (txn_state == TransactionState::SHRINKING) {
         if (lock_mode != LockMode::SHARED) {
           txn->SetState(TransactionState::ABORTED);
-          LOG_WARN("LOCK_ON_SHRINKING\n");
+          LOG_WARN("LOCK_ON_SHRINKING");
           throw TransactionAbortException(txn_id, AbortReason::LOCK_ON_SHRINKING);
         }
       }
@@ -500,12 +494,12 @@ auto LockManager::LockRow(Transaction *txn, LockMode lock_mode, const table_oid_
       // X, IX locks are allowed in the GROWING state.
       if (lock_mode == LockMode::SHARED) {
         txn->SetState(TransactionState::ABORTED);
-        LOG_WARN("LOCK_SHARED_ON_READ_UNCOMMITTED\n");
+        LOG_WARN("LOCK_SHARED_ON_READ_UNCOMMITTED");
         throw TransactionAbortException(txn_id, AbortReason::LOCK_SHARED_ON_READ_UNCOMMITTED);
       }
       if (txn_state == TransactionState::SHRINKING) {
         txn->SetState(TransactionState::ABORTED);
-        LOG_WARN("LOCK_ON_SHRINKING\n");
+        LOG_WARN("LOCK_ON_SHRINKING");
         throw TransactionAbortException(txn_id, AbortReason::LOCK_ON_SHRINKING);
       }
   }
@@ -517,12 +511,12 @@ auto LockManager::LockRow(Transaction *txn, LockMode lock_mode, const table_oid_
     }
     if (txn->IsRowExclusiveLocked(oid, rid)) {
       txn->SetState(TransactionState::ABORTED);
-      LOG_WARN("INCOMPATIBLE_UPGRADE\n");
+      LOG_WARN("INCOMPATIBLE_UPGRADE");
       throw TransactionAbortException(txn_id, AbortReason::INCOMPATIBLE_UPGRADE);
     }
-    if (!IsTableLocked(txn, oid, ALLLOCK)) {
+    if (!IsTableLocked(txn, oid, ANYLOCK)) {
       txn->SetState(TransactionState::ABORTED);
-      LOG_WARN("TABLE_LOCK_NOT_PRESENT\n");
+      LOG_WARN("TABLE_LOCK_NOT_PRESENT");
       throw TransactionAbortException(txn_id, AbortReason::TABLE_LOCK_NOT_PRESENT);
     }
   } else {
@@ -532,7 +526,7 @@ auto LockManager::LockRow(Transaction *txn, LockMode lock_mode, const table_oid_
     if (!IsTableLocked(txn, oid,
                        {LockMode::INTENTION_EXCLUSIVE, LockMode::SHARED_INTENTION_EXCLUSIVE, LockMode::EXCLUSIVE})) {
       txn->SetState(TransactionState::ABORTED);
-      LOG_WARN("TABLE_LOCK_NOT_PRESENT\n");
+      LOG_WARN("TABLE_LOCK_NOT_PRESENT");
       throw TransactionAbortException(txn_id, AbortReason::TABLE_LOCK_NOT_PRESENT);
     }
     if (txn->IsRowSharedLocked(oid, rid)) {
@@ -542,7 +536,6 @@ auto LockManager::LockRow(Transaction *txn, LockMode lock_mode, const table_oid_
 
   //  if an exclusive lock is attempted on a row, the transaction must hold either
   //       X, IX, or SIX on the table.
-
   row_lock_map_latch_.lock();
 
   MY_LOGR("txn {} {} table {} lockrow {} {}", txn_id, txn_level, oid, rid, lock_mode);
@@ -567,7 +560,7 @@ auto LockManager::LockRow(Transaction *txn, LockMode lock_mode, const table_oid_
     if (upgrade) {
       if (lrque->upgrading_ != INVALID_TXN_ID) {
         txn->SetState(TransactionState::ABORTED);
-        LOG_WARN("UPGRADE_CONFLICT\n");
+        LOG_WARN("UPGRADE_CONFLICT");
         throw TransactionAbortException(txn_id, AbortReason::UPGRADE_CONFLICT);
       }
 
@@ -595,8 +588,6 @@ auto LockManager::LockRow(Transaction *txn, LockMode lock_mode, const table_oid_
     });
 
     if (txn->GetState() == TransactionState::ABORTED) {
-      // LOG_WARN("\033[0;41m%d: txn %d table %d lockrow [%d,%d] %s abort\033[0m\n", ::gettid(), txn_id, oid,
-      //          rid.GetPageId(), rid.GetSlotNum(), LockModeToString(lock_mode).c_str());
       request_queue.erase(request_it);
       return false;
     }
@@ -634,7 +625,7 @@ auto LockManager::UnlockRow(Transaction *txn, const table_oid_t &oid, const RID 
 
   if (!txn->IsRowExclusiveLocked(oid, rid) && !txn->IsRowSharedLocked(oid, rid)) {
     txn->SetState(TransactionState::ABORTED);
-    LOG_WARN("ATTEMPTED_UNLOCK_BUT_NO_LOCK_HELD\n");
+    LOG_WARN("ATTEMPTED_UNLOCK_BUT_NO_LOCK_HELD");
     throw TransactionAbortException(txn_id, AbortReason::ATTEMPTED_UNLOCK_BUT_NO_LOCK_HELD);
   }
 
@@ -656,7 +647,6 @@ auto LockManager::UnlockRow(Transaction *txn, const table_oid_t &oid, const RID 
                            [txn_id](const auto &lock_request) { return lock_request->txn_id_ == txn_id; });
     assert(it != request_queue.end() && (*it)->granted_);
     lock_mode = it->get()->lock_mode_;
-    MY_LOGR("txn {} {} table {} unlockrow {} {} SUCCESS", txn_id, txn_level, oid, rid, lock_mode);
     request_queue.erase(it);
     lrque->cv_.notify_all();
   }
@@ -691,13 +681,11 @@ auto LockManager::UnlockRow(Transaction *txn, const table_oid_t &oid, const RID 
 
 // t1 wait for t2
 void LockManager::AddEdge(txn_id_t t1, txn_id_t t2) {
-  if (t1 == t2) {
-    return;
-  }
+  assert(t1 != t2);
   auto &vec = waits_for_[t2];
   auto it = std::find(vec.begin(), vec.end(), t1);
   if (it == vec.end()) {
-    // LOG_DEBUG("add edge %d -> %d\n", t1, t2);
+    MY_LOGC("add edge {} -> {}", t1, t2);
     vec.push_back(t1);
   }
 }
@@ -706,7 +694,7 @@ void LockManager::RemoveEdge(txn_id_t t1, txn_id_t t2) {
   auto &vec = waits_for_[t2];
   auto it = std::find(vec.begin(), vec.end(), t1);
   if (it != vec.end()) {
-    // LOG_DEBUG("remove edge %d -> %d\n", t1, t2);
+    MY_LOGC("emove edge {} -> {}", t1, t2);
     vec.erase(it);
   }
 }
@@ -774,7 +762,7 @@ void LockManager::RunCycleDetection() {
       std::lock_guard lock(waits_for_latch_);
       table_lock_map_latch_.lock();
       row_lock_map_latch_.lock();
-      MY_LOGC("RunCycleDetection round {}", round);
+      MY_LOGC(RED("round {}"), round);
 
       auto add_edges = [&](const auto &map) {
         for (const auto &[oid, que] : map) {
@@ -783,9 +771,6 @@ void LockManager::RunCycleDetection() {
 
           {
             std::lock_guard lock(que->latch_);
-            // if (!que->request_queue_.empty()) {
-            //   fmt::print(" queue: {}\n", que->request_queue_);
-            // }
             for (const auto &lock_request : que->request_queue_) {
               if (lock_request->granted_) {
                 granted.push_back(lock_request->txn_id_);
@@ -835,23 +820,21 @@ void LockManager::RunCycleDetection() {
         if (const auto *p = std::get_if<table_oid_t>(&txn_variant_map_[txn_id])) {
           txn_variant_map_latch_.unlock();
           const auto tid = *p;
-          // LOG_WARN("\033[0;31m abort txn %d waits for table %d\033[0m;\n", txn_id, tid);
+          MY_LOGC(BRED("mabort txn %d waits for table {}"), txn_id, tid);
           auto &lock_request_que = table_lock_map_[tid];
           remove_edges(lock_request_que, txn_id);
           lock_request_que->cv_.notify_all();
         } else {
           const auto rid = std::get<RID>(txn_variant_map_[txn_id]);
           txn_variant_map_latch_.unlock();
-          MY_LOGC("abort {} waits for tuple {}", txn_id, rid);
-          // LOG_WARN("\033[0;31m abort txn %d waits for tuple [%d,%d]\033[0m;\n", txn_id, rid.GetPageId(),
-          //          rid.GetSlotNum());
+          MY_LOGC(BRED("mabort {} waits for tuple {}"), txn_id, rid);
           auto &lock_request_que = row_lock_map_[rid];
           remove_edges(lock_request_que, txn_id);
           lock_request_que->cv_.notify_all();
         }
       }
 
-      MY_LOGC("CycleDetection finish round {}", round++);
+      MY_LOGC(RED("mfinish round {}"), round++);
       row_lock_map_latch_.unlock();
       table_lock_map_latch_.unlock();
       waits_.clear();
@@ -899,7 +882,7 @@ auto LockManager::IsTableLocked(Transaction *txn, const table_oid_t &oid, const 
 }
 
 auto LockManager::LockRequest::ToString() -> std::string {
-  return fmt::format("[{} {} {}] ", txn_id_, lock_mode_, granted_);
+  return fmt::format("[{} {} {}]", txn_id_, lock_mode_, granted_);
 }
 
 }  // namespace bustub

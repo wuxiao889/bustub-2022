@@ -15,6 +15,16 @@
 #include "fmt/core.h"
 #include "gtest/gtest.h"
 
+#define TEST_TIMEOUT_BEGIN                           \
+  std::promise<bool> promisedFinished;               \
+  auto futureResult = promisedFinished.get_future(); \
+                              std::thread([](std::promise<bool>& finished) {
+#define TEST_TIMEOUT_FAIL_END(X)                                                                  \
+  finished.set_value(true);                                                                       \
+  }, std::ref(promisedFinished)).detach();                                                        \
+  EXPECT_TRUE(futureResult.wait_for(std::chrono::milliseconds(X)) != std::future_status::timeout) \
+      << "Test Failed Due to Time Out";
+
 namespace bustub {
 
 /*
@@ -486,6 +496,55 @@ TEST(LockManagerTest, UpgradeTest1) {
   delete txn2;
 }
 
-TEST(LockManagerTest, DirtyRead) {}
+TEST(LockManagerTest, MixedTest) {
+  TEST_TIMEOUT_BEGIN
+  const int num = 10;
+  LockManager lock_mgr{};
+  TransactionManager txn_mgr{&lock_mgr};
+  std::stringstream result;
+  auto bustub = std::make_unique<bustub::BustubInstance>();
+  auto writer = bustub::SimpleStreamWriter(result, true, " ");
+
+  bustub->ExecuteSql("\\dt", writer);
+  auto schema = "CREATE TABLE test_1 (x int, y int);";
+  bustub->ExecuteSql(schema, writer);
+  std::string query = "INSERT INTO test_1 VALUES ";
+  for (size_t i = 0; i < num; i++) {
+    query += fmt::format("({}, {})", i, 0);
+    if (i != num - 1) {
+      query += ", ";
+    } else {
+      query += ";";
+    }
+  }
+  bustub->ExecuteSql(query, writer);
+  schema = "CREATE TABLE test_2 (x int, y int);";
+  bustub->ExecuteSql(schema, writer);
+  bustub->ExecuteSql(query, writer);
+
+  auto txn1 = bustub->txn_manager_->Begin();
+  auto txn2 = bustub->txn_manager_->Begin();
+
+  fmt::print("------\n");
+
+  query = "delete from test_1 where x = 100;";
+  bustub->ExecuteSqlTxn(query, writer, txn2);
+
+  query = "select * from test_1;";
+  bustub->ExecuteSqlTxn(query, writer, txn2);
+
+  query = "select * from test_1;";
+  bustub->ExecuteSqlTxn(query, writer, txn1);
+
+  bustub->txn_manager_->Commit(txn1);
+  fmt::print("txn1 commit\n");
+
+  bustub->txn_manager_->Commit(txn2);
+  fmt::print("txn2 commit\n");
+
+  delete txn1;
+  delete txn2;
+  TEST_TIMEOUT_FAIL_END(10000)
+}
 
 }  // namespace bustub

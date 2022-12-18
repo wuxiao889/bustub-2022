@@ -31,7 +31,6 @@ UpdateExecutor::UpdateExecutor(ExecutorContext *exec_ctx, const UpdatePlanNode *
 }
 
 void UpdateExecutor::Init() {
-  fmt::print("{} {}\n", exec_ctx_->GetTransaction()->GetTransactionId(), plan_->ToString());
   child_executor_->Init();
   LockTable();
 }

@@ -55,6 +55,13 @@ class BPlusTreeLeafPage : public BPlusTreePage {
   void SetKeyAt(int index, const KeyType &key);
   void SetValueAt(int index, const ValueType &value);
 
+  auto GetValue(const KeyType &key, ValueType &value, const KeyComparator &comparator) -> bool;
+  auto GetKeyValue(int index) -> MappingType { return array_[index]; }
+
+  void ShiftLeft(int i = 0);
+  void ShiftRight();
+
+  void Copy(const BPlusTreeLeafPage *src, int result, int first, int last);
   void InsertAt(int index, const KeyType &key, const ValueType &value);
   auto Insert(const KeyType &key, const ValueType &value, const KeyComparator &comparator) -> bool;
 
@@ -62,15 +69,6 @@ class BPlusTreeLeafPage : public BPlusTreePage {
   auto LowerBound(const KeyType &key, const KeyComparator &comparator) const -> int;
 
   void Split(BPlusTreeLeafPage *new_node);
-
-  auto GetValue(const KeyType &key, ValueType &value, const KeyComparator &comparator) -> bool;
-
-  auto operator[](int index) -> MappingType & { return array_[index]; }
-
-  void ShiftLeft(int i = 0);
-  void ShiftRight();
-
-  void Copy(const BPlusTreeLeafPage *src, int result, int first, int last);
 
  private:
   page_id_t next_page_id_;

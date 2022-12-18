@@ -90,6 +90,7 @@ TEST(LockManagerTest, RepeatableRead) {
     auto writer = bustub::SimpleStreamWriter(ss, true);
     auto txn = bustub->txn_manager_->Begin(nullptr, bustub::IsolationLevel::REPEATABLE_READ);
     bustub->ExecuteSqlTxn(query, writer, txn);
+    CheckGrowing(txn);
     bustub->txn_manager_->Commit(txn);
     delete txn;
     if (ss.str() != fmt::format("{}\t\n", num)) {
@@ -104,6 +105,7 @@ TEST(LockManagerTest, RepeatableRead) {
     auto writer = bustub::SimpleStreamWriter(ss, true);
     auto txn = bustub->txn_manager_->Begin(nullptr, bustub::IsolationLevel::REPEATABLE_READ);
     bustub->ExecuteSqlTxn(query, writer, txn);
+    CheckGrowing(txn);
     bustub->txn_manager_->Commit(txn);
     delete txn;
     fmt::print("--- YOUR RESULT ---\n{}\n", ss.str());
@@ -128,6 +130,7 @@ TEST(LockManagerTest, RepeatableRead) {
     std::string s2 = ss.str();
 
     EXPECT_EQ(s1, s2);
+    CheckGrowing(txn);
     bustub->txn_manager_->Commit(txn);
     fmt::print("txn threadt0 commit\n");
     delete txn;
@@ -144,6 +147,7 @@ TEST(LockManagerTest, RepeatableRead) {
     bustub->ExecuteSqlTxn(query, writer, txn);
     fmt::print("txn thread t1 result\n{}\n", ss.str());
 
+    CheckGrowing(txn);
     bustub->txn_manager_->Commit(txn);
     fmt::print("txn thread t1 commit\n");
     delete txn;
@@ -185,6 +189,7 @@ TEST(LockManagerTest, Readcommited) {
     auto writer = bustub::SimpleStreamWriter(ss, true);
     auto txn = bustub->txn_manager_->Begin(nullptr, bustub::IsolationLevel::REPEATABLE_READ);
     bustub->ExecuteSqlTxn(query, writer, txn);
+    CheckGrowing(txn);
     bustub->txn_manager_->Commit(txn);
     delete txn;
     if (ss.str() != fmt::format("{}\t\n", num)) {
@@ -199,6 +204,7 @@ TEST(LockManagerTest, Readcommited) {
     auto writer = bustub::SimpleStreamWriter(ss, true);
     auto txn = bustub->txn_manager_->Begin(nullptr, bustub::IsolationLevel::REPEATABLE_READ);
     bustub->ExecuteSqlTxn(query, writer, txn);
+    CheckGrowing(txn);
     bustub->txn_manager_->Commit(txn);
     delete txn;
     fmt::print("--- YOUR RESULT ---\n{}\n", ss.str());
@@ -223,6 +229,7 @@ TEST(LockManagerTest, Readcommited) {
     std::string s2 = ss.str();
 
     EXPECT_NE(s1, s2);
+    CheckGrowing(txn);
     bustub->txn_manager_->Commit(txn);
     fmt::print("txn thread t0 commit\n");
     delete txn;
@@ -239,6 +246,7 @@ TEST(LockManagerTest, Readcommited) {
     bustub->ExecuteSqlTxn(query, writer, txn);
     fmt::print("txn thread t1 result\n{}", ss.str());
 
+    CheckGrowing(txn);
     bustub->txn_manager_->Commit(txn);
     fmt::print("txn thread t1 commit\n");
     delete txn;
@@ -249,3 +257,61 @@ TEST(LockManagerTest, Readcommited) {
 }
 
 }  // namespace bustub
+
+/*
+x: create schema
+Table created with id = 0
+x: initialize data
+--- YOUR RESULT ---
+0       0
+1       0
+2       0
+3       0
+4       0
+
+txn thread t0 select * from nft where id = 0
+thread t0 result
+0       0
+
+txn thread t1 update nft set terrier = 1 where id = 0
+txn thread t0 select * from nft where id = 0
+txn thread t0 result
+0       0
+
+txn threadt0 commit
+txn thread t1 result
+1
+
+txn thread t1 commit
+[       OK ] LockManagerTest.RepeatableRead (201 ms)
+[ RUN      ] LockManagerTest.Readcommited
+x: create schema
+Table created with id = 0
+x: initialize data
+--- YOUR RESULT ---
+0       0
+1       0
+2       0
+3       0
+4       0
+
+thread t0 select * from nft
+thread t0 result 0
+0       0
+1       0
+2       0
+3       0
+4       0
+
+txn thread t1 update nft set terrier = 1 where id = 0
+txn thread t1 result
+1
+txn thread t1 commit
+txn select * from nft
+thread t0 result 1
+0       1
+1       0
+2       0
+3       0
+
+*/

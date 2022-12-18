@@ -48,15 +48,15 @@ class IndexIterator {
 
   auto operator!=(const IndexIterator &itr) const -> bool { return !operator==(itr); }
 
+  auto IsEnd() -> bool;
+
  private:
-  // add your own private member variables here
   // Tree *tree_{};
+  // add your own private member variables here
   page_id_t page_id_{INVALID_PAGE_ID};
   int position_{0};
   BufferPoolManager *buffer_pool_manager_{};
   MappingType value_;
-
-  auto IsEnd() -> bool;
 };
 
 }  // namespace bustub
