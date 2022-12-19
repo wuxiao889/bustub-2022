@@ -16,6 +16,8 @@
 #include "concurrency/lock_manager.h"
 #include "concurrency/transaction.h"
 
+// #define SEQNLOCK
+
 namespace bustub {
 
 SeqScanExecutor::SeqScanExecutor(ExecutorContext *exec_ctx, const SeqScanPlanNode *plan)
@@ -74,6 +76,7 @@ auto SeqScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
 }
 
 void SeqScanExecutor::LockTable() {
+#ifndef SEQNLOCK
   const auto &txn = exec_ctx_->GetTransaction();
   const auto &lock_mgr = exec_ctx_->GetLockManager();
   const auto &oid = plan_->table_oid_;
@@ -93,9 +96,11 @@ void SeqScanExecutor::LockTable() {
     assert(txn->GetState() == TransactionState::ABORTED);
     throw ExecutionException("SeqScanExecutor::Init() lock fail");
   }
+#endif
 }
 
 void SeqScanExecutor::UnLockTable() {
+#ifndef SEQNLOCK
   const auto &txn = exec_ctx_->GetTransaction();
   const auto &lock_mgr = exec_ctx_->GetLockManager();
   const auto &oid = plan_->GetTableOid();
@@ -104,9 +109,11 @@ void SeqScanExecutor::UnLockTable() {
       lock_mgr->UnlockTable(txn, oid);
     }
   }
+#endif
 }
 
 void SeqScanExecutor::LockRow(const RID &rid) {
+#ifndef SEQNLOCK
   const auto &txn = exec_ctx_->GetTransaction();
   const auto &lock_mgr = exec_ctx_->GetLockManager();
   const auto &oid = plan_->GetTableOid();
@@ -120,9 +127,11 @@ void SeqScanExecutor::LockRow(const RID &rid) {
     txn->SetState(TransactionState::ABORTED);
     throw ExecutionException("SeqScanExecutor::Next() lock fail");
   }
+#endif
 }
 
 void SeqScanExecutor::UnLockRow(const RID &rid) {
+#ifndef SEQNLOCK
   const auto &txn = exec_ctx_->GetTransaction();
   const auto &lock_mgr = exec_ctx_->GetLockManager();
   const auto &oid = plan_->GetTableOid();
@@ -131,6 +140,7 @@ void SeqScanExecutor::UnLockRow(const RID &rid) {
       lock_mgr->UnlockRow(txn, oid, rid);
     }
   }
+#endif
 }
 
 }  // namespace bustub

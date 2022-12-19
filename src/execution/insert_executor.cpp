@@ -22,6 +22,8 @@
 #include "type/value.h"
 #include "type/value_factory.h"
 
+// #define INSERTNLOCK
+
 namespace bustub {
 
 InsertExecutor::InsertExecutor(ExecutorContext *exec_ctx, const InsertPlanNode *plan,
@@ -69,6 +71,7 @@ auto InsertExecutor::Next(Tuple *tuple, RID *rid) -> bool {
 }
 
 void InsertExecutor::LockTable() {
+#ifndef INSERTNLOCK
   const auto &lock_mgr = exec_ctx_->GetLockManager();
   const auto &txn = exec_ctx_->GetTransaction();
   const auto &oid = plan_->table_oid_;
@@ -89,9 +92,11 @@ void InsertExecutor::LockTable() {
     assert(txn->GetState() == TransactionState::ABORTED);
     throw ExecutionException("InsertExecutor::LockTable fail");
   }
+#endif
 }
 
 void InsertExecutor::LockRow(const RID &rid) {
+#ifndef INSERTNLOCK
   const auto &txn = exec_ctx_->GetTransaction();
   const auto &lock_mgr = exec_ctx_->GetLockManager();
   const auto &oid = plan_->table_oid_;
@@ -106,6 +111,7 @@ void InsertExecutor::LockRow(const RID &rid) {
     assert(txn->GetState() == TransactionState::ABORTED);
     throw ExecutionException("InsertExecutor::LockRow fail");
   }
+#endif
 }
 
 }  // namespace bustub

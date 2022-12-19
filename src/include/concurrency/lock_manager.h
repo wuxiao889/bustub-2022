@@ -29,6 +29,16 @@
 #include "common/rid.h"
 #include "concurrency/transaction.h"
 
+#define NLOCK
+
+#ifdef NLOCK
+#define SEQNLOCK
+#define INSERTNLOCK
+#define DELETENLOCK
+#define UPDATENLOCK
+#define INDEXNLOCK
+#endif
+
 namespace bustub {
 
 class TransactionManager;

@@ -17,6 +17,8 @@
 #include "execution/executors/delete_executor.h"
 #include "type/value_factory.h"
 
+#define DELETENLOCK
+
 namespace bustub {
 
 DeleteExecutor::DeleteExecutor(ExecutorContext *exec_ctx, const DeletePlanNode *plan,
@@ -64,6 +66,7 @@ auto DeleteExecutor::Next(Tuple *tuple, RID *rid) -> bool {
 }
 
 void DeleteExecutor::LockTable() {
+#ifndef DELETENLOCK
   const auto &lock_mgr = exec_ctx_->GetLockManager();
   const auto &txn = exec_ctx_->GetTransaction();
   const auto &oid = plan_->table_oid_;
@@ -80,9 +83,11 @@ void DeleteExecutor::LockTable() {
     assert(txn->GetState() == TransactionState::ABORTED);
     throw ExecutionException("DeleteExecutor::LockTable fail");
   }
+#endif
 }
 
 void DeleteExecutor::LockRow(const RID &rid) {
+#ifndef DELETENLOCK
   const auto &txn = exec_ctx_->GetTransaction();
   const auto &lock_mgr = exec_ctx_->GetLockManager();
   const auto &oid = plan_->table_oid_;
@@ -97,6 +102,7 @@ void DeleteExecutor::LockRow(const RID &rid) {
     assert(txn->GetState() == TransactionState::ABORTED);
     throw ExecutionException("DeleteExecutor::LockRow fail");
   }
+#endif
 }
 
 }  // namespace bustub

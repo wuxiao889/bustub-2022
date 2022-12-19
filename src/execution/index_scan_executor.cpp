@@ -22,6 +22,8 @@
 #include "storage/page/table_page.h"
 #include "type/value.h"
 
+// #define INDEXNLOCK
+
 namespace bustub {
 IndexScanExecutor::IndexScanExecutor(ExecutorContext *exec_ctx, const IndexScanPlanNode *plan)
     : AbstractExecutor(exec_ctx),
@@ -89,6 +91,7 @@ auto IndexScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
 }
 
 void IndexScanExecutor::LockTable() {
+#ifndef INDEXNLOCK
   const auto &lock_mgr = exec_ctx_->GetLockManager();
   const auto &txn = exec_ctx_->GetTransaction();
   const auto &oid = table_info_->oid_;
@@ -107,9 +110,11 @@ void IndexScanExecutor::LockTable() {
     assert(txn->GetState() == TransactionState::ABORTED);
     throw ExecutionException("IndexScanExecutor::LockTable() lock fail");
   }
+#endif
 }
 
 void IndexScanExecutor::UnLockTable() {
+#ifndef INDEXNLOCK
   const auto &lock_mgr = exec_ctx_->GetLockManager();
   const auto &txn = exec_ctx_->GetTransaction();
   const auto &oid = table_info_->oid_;
@@ -118,9 +123,11 @@ void IndexScanExecutor::UnLockTable() {
       lock_mgr->UnlockTable(txn, oid);
     }
   }
+#endif
 }
 
 void IndexScanExecutor::LockRow(const RID &rid) {
+#ifndef INDEXNLOCK
   const auto &lock_mgr = exec_ctx_->GetLockManager();
   const auto &txn = exec_ctx_->GetTransaction();
   const auto &oid = table_info_->oid_;
@@ -134,9 +141,11 @@ void IndexScanExecutor::LockRow(const RID &rid) {
     txn->SetState(TransactionState::ABORTED);
     throw ExecutionException("IndexScanExecutor::Next() lock fail");
   }
+#endif
 }
 
 void IndexScanExecutor::UnLockRow(const RID &rid) {
+#ifndef INDEXNLOCK
   const auto &lock_mgr = exec_ctx_->GetLockManager();
   const auto &txn = exec_ctx_->GetTransaction();
   const auto &oid = table_info_->oid_;
@@ -145,6 +154,7 @@ void IndexScanExecutor::UnLockRow(const RID &rid) {
       lock_mgr->UnlockRow(txn, oid, rid);
     }
   }
+#endif
 }
 
 }  // namespace bustub

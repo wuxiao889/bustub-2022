@@ -18,6 +18,8 @@
 #include "storage/table/tuple.h"
 #include "type/value_factory.h"
 
+// #define UPDATENLOCK
+
 namespace bustub {
 
 UpdateExecutor::UpdateExecutor(ExecutorContext *exec_ctx, const UpdatePlanNode *plan,
@@ -64,6 +66,7 @@ auto UpdateExecutor::Next(Tuple *tuple, RID *rid) -> bool {
 }
 
 void UpdateExecutor::LockTable() {
+#ifndef UPDATENLOCK
   const auto &lock_mgr = exec_ctx_->GetLockManager();
   const auto &txn = exec_ctx_->GetTransaction();
   const auto oid = plan_->table_oid_;
@@ -81,9 +84,11 @@ void UpdateExecutor::LockTable() {
     assert(txn->GetState() == TransactionState::ABORTED);
     throw ExecutionException("UpdateExecutor::Init() lock fail");
   }
+#endif
 }
 
 void UpdateExecutor::LockRow(const RID &rid) {
+#ifndef UPDATENLOCK
   const auto &txn = exec_ctx_->GetTransaction();
   const auto &lock_mgr = exec_ctx_->GetLockManager();
   const auto oid = plan_->table_oid_;
@@ -95,6 +100,7 @@ void UpdateExecutor::LockRow(const RID &rid) {
     txn->SetState(TransactionState::ABORTED);
     throw ExecutionException("InsertExecutor::Next() lock fail");
   }
+#endif
 }
 
 }  // namespace bustub
