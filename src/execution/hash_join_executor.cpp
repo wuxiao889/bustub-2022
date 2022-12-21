@@ -62,7 +62,7 @@ void HashJoinExecutor::Init() {
 
   const auto left_size = Optimizer::EstimatePlan(plan_->GetLeftPlan());
   if (left_size) {
-    left_ht_.reserve(left_size.value() / 2);
+    left_ht_.reserve(left_size.value() / 3);
   }
 
   while (left_child_executor_->Next(&tuple, &rid)) {
