@@ -47,32 +47,33 @@ namespace bustub {
 
 auto Optimizer::OptimizeCustom(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef {
   auto p = plan;
-  // fmt::print("p\n{}\n\n", *p);
+  // fmt::print("origin plan:\n{}\n\n", p);
   p = OptimizeMergeProjection(p);
   // fmt::print("OptimizeMergeProjection(p)\n{}\n\n", *p);
   p = OptimizeColumnPruning(p);
-  // fmt::print("OptimizeColumnPruning(p)\n{}\n\n", *p);
+  // fmt::print("OptimizeColumnPruning:\n{}\n\n", p);
   // TODO(wxx) merge once?
   p = OptimizeMergeProjection(p);
-  // fmt::print("OptimizeMergeProjection(p)1\n{}\n\n", *p);
+  // fmt::print("OptimizeMergeProjection:\n{}\n\n", p);
   p = OptimizeFilter(p);
   p = OptimizeEliminateTrueFalseFilter(p);
-  // fmt::print("OptimizeFilter(p)\n{}\n\n", *p);
+  // fmt::print("OptimizeFilter:\n{}\n\n", p);
   p = OptimizeMergeFilterNLJ(p);  // 不能先调整order在merger filter nlj， filter pred顺序会不对
-  // fmt::print("OptimizeMergeFilterNLJ(p)\n{}\n\n", *p);
+  // fmt::print("OptimizeMergeFilterNLJ:\n{}\n\n", p);
   p = OptimizeJoinOrder(p);
-  // fmt::print("OptimizeJoinOrder(p)\n{}\n\n", *p);
+  // fmt::print("OptimizeJoinOrder:\n{}\n\n", p);
   p = OptimizeNLJPredicate(p);
-  // fmt::print("OptimizePredictPushDown(p)\n{}\n\n", *p);
+  // fmt::print("OptimizePredictPushDown:\n{}\n\n", p);
   p = OptimizeMergeFilterScan(p);
-  // fmt::print("OptimizeMergeFilterScan(p)\n{}\n\n", *p);
+  // fmt::print("OptimizeMergeFilterScan:\n{}\n\n", p);
   p = OptimizeSeqScanAsIndexScan(p);
-  // fmt::print("OptimizeSeqScanAsIndexScan(p)\n{}\n\n", *p);
+  // fmt::print("OptimizeSeqScanAsIndexScan:\n{}\n\n", p);
   p = OptimizeNLJAsIndexJoin(p);
   p = OptimizeNLJAsHashJoin(p);
 
   p = OptimizeOrderByAsIndexScan(p);
   p = OptimizeSortLimitAsTopN(p);
+  // fmt::print("final plan:\n{}\n\n", p);
   return p;
 }
 
@@ -587,3 +588,12 @@ auto Optimizer::BuildExprTree(const std::vector<AbstractExpressionRef> &exprs) -
 }
 
 }  // namespace bustub
+
+template <typename T>
+struct fmt::formatter<std::shared_ptr<T>, std::enable_if_t<std::is_base_of<bustub::AbstractPlanNode, T>::value, char>>
+    : fmt::formatter<std::string> {
+  template <typename FormatCtx>
+  auto format(const std::shared_ptr<T> &x, FormatCtx &ctx) const {
+    return fmt::formatter<std::string>::format(x->ToString(), ctx);
+  }
+};

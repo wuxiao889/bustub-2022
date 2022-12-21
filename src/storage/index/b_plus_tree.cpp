@@ -307,7 +307,7 @@ auto BPLUSTREE_TYPE::InsertPessimistic(const KeyType &key, const ValueType &valu
   int right_page_id;
   Page *right_page = NewLeafPage(&right_page_id, leaf_node->GetParentPageId());
   LeafPage *right_node = CastLeafPage(right_page);
-
+  MY_LOGI("leaf_node %d split", right_node->GetPageId());
   leaf_node->Split(right_node);
   right_node->SetNextPageId(leaf_node->GetNextPageId());
   leaf_node->SetNextPageId(right_node->GetPageId());
@@ -363,14 +363,13 @@ void BPLUSTREE_TYPE::InsertInParent(BPlusTreePage *left_node, BPlusTreePage *rig
     int index = parent_node->LowerBound(key, comparator_);
     assert(index > 0);
     parent_node->InsertAt(index, key, right_node->GetPageId());
-    // LOG_DEBUG("leaf page %d split parent_page id %d at index %d ", left_page->GetPageId(), parent_page->GetPageId(),
-    //  index);
+    MY_LOGI("page %d insert in parent page %d at %d", right_node->GetPageId(), parent_node->GetPageId(), index);
   } else {
     // split Internal parent node
     int parent_right_page_id;
     Page *parent_right_page = NewInternalPage(&parent_right_page_id, parent_node->GetParentPageId());
     InternalPage *parent_right_node = CastInternalPage(parent_right_page);
-
+    MY_LOGI("internal page %d split", parent_node->GetPageId());
     parent_node->Split(parent_right_node, key, right_node->GetPageId(), comparator_);
     UpdateChild(parent_right_node, 0, parent_right_node->GetSize());
 
@@ -428,6 +427,7 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::RemovePessimistic(const KeyType &key, Transaction *transaction) {
   // LOG_DEBUG("\033[1;32mRemovePessimistic %ld\033[0m", key.ToString());
+  MY_LOGD("remove %ld pessimistic", key.ToString());
   bool root_locked = false;
   Page *page = FindLeafPage(key, OpeType::REMOVE, false, root_locked, transaction);
   LeafPage *leaf_node = CastLeafPage(page);
@@ -483,6 +483,7 @@ auto BPLUSTREE_TYPE::RemovePessimistic(const KeyType &key, Transaction *transact
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::RemoveInParent(Page *page, bool &root_locked, Transaction *transaction) -> bool {
   BPlusTreePage *node = CastBPlusPage(page);
+  assert(node->GetSize() < node->GetMinSize());
   bool flush_node = true;
 
   assert(transaction->GetPageSet()->empty()
@@ -581,6 +582,7 @@ auto BPLUSTREE_TYPE::RemoveInParent(Page *page, bool &root_locked, Transaction *
 INDEX_TEMPLATE_ARGUMENTS
 void BPLUSTREE_TYPE::BorrowFromLeft(BPlusTreePage *node, BPlusTreePage *left_node, int left_position,
                                     Transaction *transaction) {
+  MY_LOGD("borrow %d -> %d", left_node->GetPageId(), node->GetPageId());
   Page *parent_page = transaction->GetPageSet()->back();
   InternalPage *parent_node = CastInternalPage(parent_page);
 
@@ -612,6 +614,7 @@ void BPLUSTREE_TYPE::BorrowFromLeft(BPlusTreePage *node, BPlusTreePage *left_nod
 INDEX_TEMPLATE_ARGUMENTS
 void BPLUSTREE_TYPE::BorrowFromRight(BPlusTreePage *node, BPlusTreePage *right_node, int left_position,
                                      Transaction *transaction) {
+  MY_LOGD("borrow %d <- %d", node->GetPageId(), right_node->GetPageId());
   Page *parent_page = transaction->GetPageSet()->back();
   InternalPage *parent_node = CastInternalPage(parent_page);
   if (node->IsLeafPage()) {
@@ -641,6 +644,7 @@ void BPLUSTREE_TYPE::BorrowFromRight(BPlusTreePage *node, BPlusTreePage *right_n
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::Merge(BPlusTreePage *left_node, BPlusTreePage *right_node, int posOfLeftPage, bool &root_locked,
                            Transaction *transaction) -> bool {
+  MY_LOGR("merge  [%d , %d]", left_node->GetPageId(), right_node->GetPageId());
   Page *parent_page = transaction->GetPageSet()->back();
   transaction->GetPageSet()->pop_back();
   InternalPage *parent_node = CastInternalPage(parent_page);
@@ -711,6 +715,7 @@ auto BPLUSTREE_TYPE::NewInternalRootPage(page_id_t *page_id) -> Page * {
   Page *page = buffer_pool_manager_->NewPage(page_id);
   CastInternalPage(page)->Init(*page_id, INVALID_PAGE_ID, internal_max_size_);
   UpdateRootPageId(0);
+  MY_LOGI("new internal root %d", page->GetPageId());
   return page;
 }
 
@@ -922,7 +927,6 @@ void BPLUSTREE_TYPE::Print(BufferPoolManager *bpm) {
     LOG_WARN("Print an empty tree");
     return;
   }
-  std::cout << "left_most_:" << left_most_ << " right_most_:" << right_most_ << std::endl;
   ToString(reinterpret_cast<BPlusTreePage *>(bpm->FetchPage(root_page_id_)->GetData()), bpm);
 }
 

@@ -168,9 +168,7 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::Split(BPlusTreeInternalPage *new_node, cons
   vec.reserve(GetMaxSize() + 1);
   SetSize(0);
   int index = std::lower_bound(vec.begin() + 1, vec.end(), key,
-                               [&](const std::pair<KeyType, page_id_t> &l, const KeyType &r) {
-                                 return comparator(l.first, r) < 0;
-                               }) -
+                               [&](const auto &l, const auto &r) { return comparator(l.first, r) < 0; }) -
               vec.begin();
   vec.insert(vec.begin() + index, {key, value});
 

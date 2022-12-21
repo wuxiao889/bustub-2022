@@ -32,7 +32,7 @@ TEST(BPlusTreeTests, InsertTest1) {
   auto *disk_manager = new DiskManager("test.db");
   BufferPoolManager *bpm = new BufferPoolManagerInstance(50, disk_manager);
   // create b+ tree
-  BPlusTree<GenericKey<8>, RID, GenericComparator<8>> tree("foo_pk", bpm, comparator, 6, 6);
+  BPlusTree<GenericKey<8>, RID, GenericComparator<8>> tree("foo_pk", bpm, comparator, 3, 3);
   GenericKey<8> index_key;
   RID rid;
   // create transaction
@@ -42,7 +42,7 @@ TEST(BPlusTreeTests, InsertTest1) {
   auto header_page = bpm->NewPage(&page_id);
   (void)header_page;
 
-  int size = 10000;
+  int size = 20000;
 
   std::vector<int64_t> keys(size);
 
@@ -108,7 +108,7 @@ TEST(BPlusTreeTests, InsertTest1) {
     EXPECT_EQ(current_key, keys.size() + 1);
   }
 
-  // i = 0;
+  i = 0;
   // keys = {17, 9, 19, 3, 11, 1, 15, 7, 5, 13};
   std::shuffle(keys.begin(), keys.end(), g);
   for (auto key : keys) {
@@ -198,7 +198,7 @@ TEST(BPlusTreeTests, DISABLED_InsertTest2) {
   remove("test.log");
 }
 
-TEST(BPlusTreeTests, InsertTest3) {
+TEST(BPlusTreeTests, DISABLED_InsertTest3) {
   // create KeyComparator and index schema
   auto key_schema = ParseCreateStatement("a bigint");
   GenericComparator<8> comparator(key_schema.get());
