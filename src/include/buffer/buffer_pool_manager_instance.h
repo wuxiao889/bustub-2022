@@ -202,6 +202,7 @@ class BufferPoolManagerInstance : public BufferPoolManager {
 
   // TODO(student): You may add additional private members and helper functions
 
+  // void CheckPinCount() override;
   /**
    * @brief reset page data
    * @param page page to reset

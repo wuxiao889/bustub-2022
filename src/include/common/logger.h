@@ -32,9 +32,14 @@
  * eliminate all instructions in the final binary.
  * @author Hideaki
  */
-
+#include <fmt/chrono.h>  // NOLINT
+#include <fmt/format.h>  // NOLINT
+#include <unistd.h>
 #include <ctime>
 #include <string>
+#include "fmt/color.h"
+#include "fmt/core.h"
+#include "fmt/ranges.h"
 
 namespace bustub {
 
@@ -45,7 +50,7 @@ static constexpr auto PastLastSlash(cstr a, cstr b) -> cstr {
   return *a == '\0' ? b : *b == '/' ? PastLastSlash(a + 1, a + 1) : PastLastSlash(a + 1, b);
 }
 
-static constexpr auto PastLastSlash(cstr a) -> cstr { return PastLastSlash(a, a); }
+[[maybe_unused]] static constexpr auto PastLastSlash(cstr a) -> cstr { return PastLastSlash(a, a); }
 
 #define __SHORT_FILE__                            \
   ({                                              \
@@ -101,6 +106,7 @@ void OutputLogHeader(const char *file, int line, const char *func, int level);
 #define LOG_ERROR(...)                                                      \
   OutputLogHeader(__SHORT_FILE__, __LINE__, __FUNCTION__, LOG_LEVEL_ERROR); \
   ::fprintf(LOG_OUTPUT_STREAM, __VA_ARGS__);                                \
+  fprintf(LOG_OUTPUT_STREAM, "\n");                                         \
   ::fflush(stdout)
 #else
 #define LOG_ERROR(...) ((void)0)
@@ -115,6 +121,7 @@ void OutputLogHeader(const char *file, int line, const char *func, int level);
 #define LOG_WARN(...)                                                      \
   OutputLogHeader(__SHORT_FILE__, __LINE__, __FUNCTION__, LOG_LEVEL_WARN); \
   ::fprintf(LOG_OUTPUT_STREAM, __VA_ARGS__);                               \
+  fprintf(LOG_OUTPUT_STREAM, "\n");                                        \
   ::fflush(stdout)
 #else
 #define LOG_WARN(...) ((void)0)
@@ -129,6 +136,7 @@ void OutputLogHeader(const char *file, int line, const char *func, int level);
 #define LOG_INFO(...)                                                      \
   OutputLogHeader(__SHORT_FILE__, __LINE__, __FUNCTION__, LOG_LEVEL_INFO); \
   ::fprintf(LOG_OUTPUT_STREAM, __VA_ARGS__);                               \
+  fprintf(LOG_OUTPUT_STREAM, "\n");                                        \
   ::fflush(stdout)
 #else
 #define LOG_INFO(...) ((void)0)
@@ -143,6 +151,7 @@ void OutputLogHeader(const char *file, int line, const char *func, int level);
 #define LOG_DEBUG(...)                                                      \
   OutputLogHeader(__SHORT_FILE__, __LINE__, __FUNCTION__, LOG_LEVEL_DEBUG); \
   ::fprintf(LOG_OUTPUT_STREAM, __VA_ARGS__);                                \
+  fprintf(LOG_OUTPUT_STREAM, "\n");                                         \
   ::fflush(stdout)
 #else
 #define LOG_DEBUG(...) ((void)0)
@@ -157,6 +166,7 @@ void OutputLogHeader(const char *file, int line, const char *func, int level);
 #define LOG_TRACE(...)                                                      \
   OutputLogHeader(__SHORT_FILE__, __LINE__, __FUNCTION__, LOG_LEVEL_TRACE); \
   ::fprintf(LOG_OUTPUT_STREAM, __VA_ARGS__);                                \
+  fprintf(LOG_OUTPUT_STREAM, "\n");                                         \
   ::fflush(stdout)
 #else
 #define LOG_TRACE(...) ((void)0)
@@ -190,9 +200,30 @@ inline void OutputLogHeader(const char *file, int line, const char *func, int le
       type = "UNKWN";
   }
   // PAVLO: DO NOT CHANGE THIS
-  ::fprintf(LOG_OUTPUT_STREAM, "%s [%s:%d:%s] %s - ", time_str, file, line, func, type);
+  ::fprintf(LOG_OUTPUT_STREAM, "%s [%s:%d:%s] %s - %d: ", time_str, file, line, func, type, ::gettid());
 }
 
 }  // namespace bustub
+
+#define RED(x) "\033[0;31m" x " \033[0m"
+#define GREEN(x) "\033[0;32m" x "\033[0m"
+#define YELLOW(x) "\033[0;33m" x "\033[0m"
+#define BLUE(x) "\033[0;34m" x "\033[0m"
+#define MEGENTA(x) "\033[0;35m" x "\033[0m"
+#define CYAN(x) "\033[0;36m" x "\033[0m"
+
+#define BRED(x) "\033[0;41m" x " \033[0m"
+#define BGREEN(x) "\033[0;42m" x "\033[0m"
+#define BYELLOW(x) "\033[0;43m" x "\033[0m"
+#define BBLUE(x) "\033[0;44m" x "\033[0m"
+#define BMEGENTA(x) "\033[0;45m" x "\033[0m"
+#define BCYAN(x) "\033[0;46m" x "\033[0m"
+
+#define BRIGHTRED(x) "\033[0;91m" x " \033[0m"
+#define BRIGHTGREEN(x) "\033[0;92m" x " \033[0m"
+#define BRIGHTYELLOW(x) "\033[0;93m" x " \033[0m"
+#define BRIGHTBLUE(x) "\033[0;94m" x " \033[0m"
+#define BRIGHTMEGENTA(x) "\033[0;95m" x " \033[0m"
+#define BRIGHTCYAN(x) "\033[0;96m" x " \033[0m"
 
 #endif

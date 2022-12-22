@@ -1,0 +1,20 @@
+statement ok
+create table t1_50k(x int, y int);
+
+statement ok
+create index t1x on t1_50k(x);
+
+query
+INSERT INTO t1_50k values (1, 3), (2, 5), (3,7);
+----
+50000
+
+query +timing:x10:.q1
+select  * from t1_50k inner join __mock_t2_100k on t1_50k.x = __mock_t2_100k.x order by t1_50k.x limit 10;
+----
+50000
+
+query +timing:x10:.q1
+select  * from  __mock_t2_100k inner join t1_50k on t1_50k.x = __mock_t2_100k.x order by t1_50k.x limit 10;
+----
+50000

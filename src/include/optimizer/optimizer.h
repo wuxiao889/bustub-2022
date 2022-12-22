@@ -92,7 +92,7 @@ class Optimizer {
 
   auto OptimizePickIndex(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef;
 
-  //   auto OptimizePick
+  auto OptimizeNLS(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef;
   /**
    * @brief 优化逻辑表达式中的常量
    */

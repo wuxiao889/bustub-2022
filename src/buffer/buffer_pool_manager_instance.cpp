@@ -129,10 +129,12 @@ auto BufferPoolManagerInstance::FetchPgImp(page_id_t page_id) -> Page * {
     replacer_->RecordAccess(frame_id);
     replacer_->SetEvictable(frame_id, false);
     // LOG_DEBUG("page %d pin_count +1 = %d", page_id, page->pin_count_);
+    return page;
   }
   // Return nullptr if page_id needs to be fetched from the disk but all frames are currently in use and not evictable
   // (in another word, pinned).
-  return page;
+  LOG_WARN("page_id %d cant be fetched, replacer size %ld", page_id, replacer_->Size());
+  return nullptr;
 }
 
 auto BufferPoolManagerInstance::UnpinPgImp(page_id_t page_id, bool is_dirty) -> bool {
@@ -229,7 +231,7 @@ auto BufferPoolManagerInstance::AllocatePage() -> page_id_t { return next_page_i
 //     Page *page = pages_ + id;
 //     auto page_id = page->page_id_;
 //     if (page_id != INVALID_PAGE_ID && page_id != 0 && page->pin_count_ > 0) {
-//       // LOG_WARN("\033[1;31m page %d pin_count %d != 0\033[0m", page->page_id_, page->pin_count_);
+//       LOG_WARN("\033[1;31m page %d pin_count %d != 0\033[0m", page->page_id_, page->pin_count_);
 //       clear = false;
 //     }
 //   }

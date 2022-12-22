@@ -113,6 +113,7 @@ auto BPLUSTREE_TYPE::FindLeafPage(const KeyType &key, Operation operation, bool 
       int index = internal_node->Search(key, comparator_);
       // LOG_INFO("lookup to page %d at index %d", page->GetPageId(), idx - 1);
       Page *next_page = FetchChildPage(internal_node, index);
+      assert(next_page);
       next_page->RLatch();
 
       // assert(CastBPlusPage(next_page)->GetParentPageId() == internal_node->GetPageId());

@@ -15,7 +15,6 @@ void TopNExecutor::Init() {
   }
 
   child_executor_->Init();
-  fmt::print("{}\n", plan_->GetN());
   const auto &schema = plan_->OutputSchema();
   const auto &order_bys = plan_->GetOrderBy();
 

@@ -12,6 +12,8 @@
 #include "catalog/schema.h"
 #include "common/logger.h"
 #include "common/macros.h"
+#include "execution/executors/nested_index_join_executor.h"
+#include "execution/executors/nested_loop_join_executor.h"
 #include "execution/expressions/abstract_expression.h"
 #include "execution/expressions/arithmetic_expression.h"
 #include "execution/expressions/column_value_expression.h"
@@ -24,6 +26,7 @@
 #include "execution/plans/hash_join_plan.h"
 #include "execution/plans/limit_plan.h"
 #include "execution/plans/mock_scan_plan.h"
+#include "execution/plans/nested_index_join_plan.h"
 #include "execution/plans/nested_loop_join_plan.h"
 #include "execution/plans/projection_plan.h"
 #include "execution/plans/seq_scan_plan.h"
@@ -59,19 +62,34 @@ auto Optimizer::OptimizeCustom(const AbstractPlanNodeRef &plan) -> AbstractPlanN
   // fmt::print("OptimizeFilter(p)\n{}\n\n", *p);
   p = OptimizeMergeFilterNLJ(p);  // 不能先调整order在merger filter nlj， filter pred顺序会不对
   // fmt::print("OptimizeMergeFilterNLJ(p)\n{}\n\n", *p);
+  p = OptimizePickIndex(p);
+  // fmt::print("OptimizePickIndex(p)\n{}\n\n", *p);
+  p = OptimizeNLJAsIndexJoin(p);
+  // fmt::print("OptimizeNLJAsIndexJoin(p)\n{}\n\n", *p);
+  p = OptimizeNLS(p);
+  // fmt::print("OptimizeNLS(p)\n{}\n\n", *p);
   p = OptimizeJoinOrder(p);
   // fmt::print("OptimizeJoinOrder(p)\n{}\n\n", *p);
   p = OptimizeNLJPredicate(p);
   // fmt::print("OptimizePredictPushDown(p)\n{}\n\n", *p);
   p = OptimizeMergeFilterScan(p);
   // fmt::print("OptimizeMergeFilterScan(p)\n{}\n\n", *p);
-  p = OptimizeNLJAsIndexJoin(p);
   p = OptimizeNLJAsHashJoin(p);
+  // fmt::print("OptimizeNLJAsHashJoin(p)\n{}\n\n", *p);
 
   p = OptimizeOrderByAsIndexScan(p);
   p = OptimizeSortLimitAsTopN(p);
+  // fmt::print("final plan\n{}\n\n", *p);
   return p;
 }
+
+/*
+Agg { types=[count_star, max, max, max, max, max, max], aggregates=[1, #0.0, #0.1, #0.2, #0.3, #0.4, #0.5], group_by=[]
+} NestedIndexJoin { type=Inner, key_predicate=#0.0, index=t1x, index_table=t1_50k }
+  HashJoin { type=Inner, left_key=#0.1, right_key=#0.1 }
+    MockScan { table=__mock_t3_1k }
+    MockScan { table=__mock_t2_100k }
+*/
 
 // TODO(wxx) bug in column pruning, if we first column pruning than merge projection
 // select colA from (select colC, colA, colB, from temp_2 order by colC - colB + colA, colA limit 20);
@@ -384,6 +402,112 @@ auto Optimizer::OptimizeFilter(const AbstractPlanNodeRef &plan) -> AbstractPlanN
     const auto &filter_plan = static_cast<const FilterPlanNode &>(*optimized_plan);
     return std::make_shared<FilterPlanNode>(filter_plan.output_schema_, OptimizeFilterExpr(filter_plan.predicate_),
                                             filter_plan.GetChildPlan());
+  }
+  return optimized_plan;
+}
+
+auto Optimizer::OptimizePickIndex(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef {
+  std::vector<AbstractPlanNodeRef> children;
+  for (const auto &child : plan->GetChildren()) {
+    children.emplace_back(OptimizePickIndex(child));
+  }
+  auto optimized_plan = plan->CloneWithChildren(std::move(children));
+  if (optimized_plan->GetType() == PlanType::NestedLoopJoin) {
+    const auto &nlj_plan = static_cast<const NestedLoopJoinPlanNode &>(*optimized_plan);
+    // Has exactly two children
+    if (nlj_plan.join_type_ == JoinType::INNER) {
+      BUSTUB_ENSURE(nlj_plan.children_.size() == 2, "NLJ should have exactly 2 children.");
+      if (const auto *expr = dynamic_cast<const ComparisonExpression *>(&nlj_plan.Predicate()); expr != nullptr) {
+        if (expr->comp_type_ == ComparisonType::Equal) {
+          if (const auto *left_expr = dynamic_cast<const ColumnValueExpression *>(expr->children_[0].get());
+              left_expr != nullptr) {
+            if (const auto *right_expr = dynamic_cast<const ColumnValueExpression *>(expr->children_[1].get());
+                right_expr != nullptr) {
+              // Ensure both exprs have tuple_id == 0
+              auto left_expr_tuple_0 =
+                  std::make_shared<ColumnValueExpression>(0, left_expr->GetColIdx(), left_expr->GetReturnType());
+              auto right_expr_tuple_0 =
+                  std::make_shared<ColumnValueExpression>(0, right_expr->GetColIdx(), right_expr->GetReturnType());
+              // Now it's in form of <column_expr> = <column_expr>. Let's match an index for them.
+              if (nlj_plan.GetLeftPlan()->GetType() == PlanType::SeqScan) {
+                const auto &left_seq_scan = static_cast<const SeqScanPlanNode &>(*nlj_plan.GetLeftPlan());
+
+                if (left_expr->GetTupleIdx() == 0 && right_expr->GetTupleIdx() == 1) {
+                  if (auto index = MatchIndex(left_seq_scan.table_name_, left_expr->GetColIdx());
+                      index != std::nullopt) {
+                    return std::make_shared<NestedLoopJoinPlanNode>(
+                        nlj_plan.output_schema_, nlj_plan.GetRightPlan(), nlj_plan.GetLeftPlan(),
+                        RewriteTupleIndex(nlj_plan.predicate_), nlj_plan.join_type_);
+                  }
+                }
+
+                if (left_expr->GetTupleIdx() == 1 && right_expr->GetTupleIdx() == 0) {
+                  if (auto index = MatchIndex(left_seq_scan.table_name_, right_expr->GetColIdx());
+                      index != std::nullopt) {
+                    return std::make_shared<NestedLoopJoinPlanNode>(
+                        nlj_plan.output_schema_, nlj_plan.GetRightPlan(), nlj_plan.GetLeftPlan(),
+                        RewriteTupleIndex(nlj_plan.predicate_), nlj_plan.join_type_);
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  return optimized_plan;
+}
+
+auto Optimizer::OptimizeNLS(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef {
+  std::vector<AbstractPlanNodeRef> children;
+  for (const auto &child : plan->GetChildren()) {
+    children.emplace_back(OptimizeNLS(child));
+  }
+  auto optimized_plan = plan->CloneWithChildren(std::move(children));
+
+  if (optimized_plan->GetType() == PlanType::NestedLoopJoin) {
+    const auto &nlj_plan = static_cast<const NestedLoopJoinPlanNode &>(*optimized_plan);
+    if (nlj_plan.join_type_ == JoinType::INNER) {
+      BUSTUB_ENSURE(nlj_plan.children_.size() == 2, "NLJ should have exactly 2 children.");
+      if (nlj_plan.GetLeftPlan()->GetType() == PlanType::NestedIndexJoin &&
+          nlj_plan.GetRightPlan()->GetType() == PlanType::MockScan) {
+        const auto &left_index_join_plan = static_cast<const NestedIndexJoinPlanNode &>(*nlj_plan.GetLeftPlan());
+        if (const auto *expr = dynamic_cast<const ComparisonExpression *>(&nlj_plan.Predicate()); expr != nullptr) {
+          if (expr->comp_type_ == ComparisonType::Equal) {
+            if (const auto *left_expr = dynamic_cast<const ColumnValueExpression *>(expr->children_[0].get());
+                left_expr != nullptr) {
+              if (const auto *right_expr = dynamic_cast<const ColumnValueExpression *>(expr->children_[1].get());
+                  right_expr != nullptr) {
+                if (left_expr->GetColIdx() > left_index_join_plan.inner_table_schema_->GetColumnCount()) {
+                  const auto &left_plan = left_index_join_plan.GetChildPlan();
+                  const auto &right_plan = nlj_plan.GetRightPlan();
+                  auto left_expr_tuple_0 = std::make_shared<ColumnValueExpression>(
+                      0, left_expr->GetColIdx() - left_index_join_plan.inner_table_schema_->GetColumnCount(),
+                      left_expr->GetReturnType());
+                  auto right_expr_tuple_1 =
+                      std::make_shared<ColumnValueExpression>(1, right_expr->GetColIdx(), right_expr->GetReturnType());
+                  auto new_nlj_predicate = std::make_shared<ComparisonExpression>(left_expr_tuple_0, right_expr_tuple_1,
+                                                                                  ComparisonType::Equal);
+                  auto new_nlj_schema =
+                      std::make_shared<Schema>(NestedLoopJoinPlanNode::InferJoinSchema(*left_plan, *right_plan));
+
+                  auto new_nlj_plan = std::make_shared<NestedLoopJoinPlanNode>(new_nlj_schema, left_plan, right_plan,
+                                                                               new_nlj_predicate, JoinType::INNER);
+
+                  auto new_index_join_plan = std::make_shared<NestedIndexJoinPlanNode>(
+                      nlj_plan.output_schema_, new_nlj_plan, left_index_join_plan.key_predicate_,
+                      left_index_join_plan.index_oid_, left_index_join_plan.index_oid_,
+                      left_index_join_plan.index_name_, left_index_join_plan.index_table_name_,
+                      left_index_join_plan.inner_table_schema_, JoinType::INNER);
+                  return new_index_join_plan;
+                }
+              }
+            }
+          }
+        }
+      }
+    }
   }
   return optimized_plan;
 }
