@@ -2,6 +2,7 @@
 #include <optional>
 #include "common/util/string_util.h"
 #include "execution/plans/abstract_plan.h"
+#include "fmt/core.h"
 
 namespace bustub {
 
@@ -14,6 +15,7 @@ auto Optimizer::Optimize(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef
     p = OptimizeNLJAsIndexJoin(p);
     p = OptimizeOrderByAsIndexScan(p);
     p = OptimizeSortLimitAsTopN(p);
+    fmt::print("starter_rule plan\n{}\n\n", *plan);
     return p;
   }
   // By default, use user-defined rules.

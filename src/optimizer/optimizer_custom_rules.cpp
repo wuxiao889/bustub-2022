@@ -45,41 +45,48 @@
 // that for some test cases, we force using starter rules, so that the configuration here won't take effects. Starter
 // rule can be forcibly enabled by `set force_optimizer_starter_rule=yes`.
 
+#define LOGO
+#ifdef LOGO
+#define MY_LOGO(...) LOG_DEBUG(__VA_ARGS__)
+#else
+#define MY_LOGO(...) ((void)0)
+#endif
+
 namespace bustub {
 
 auto Optimizer::OptimizeCustom(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef {
   auto p = plan;
-  // fmt::print("p\n{}\n\n", *p);
+  MY_LOGO("origin plan \n%s\n\n", p->ToString().c_str());
   p = OptimizeMergeProjection(p);
-  // fmt::print("OptimizeMergeProjection(p)\n{}\n\n", *p);
-  p = OptimizeColumnPruning(p);
-  // fmt::print("OptimizeColumnPruning(p)\n{}\n\n", *p);
-  // TODO(wxx) merge once?
+  MY_LOGO("OptimizeMergeProjection(p)\n%s\n\n", p->ToString().c_str());
+  p = OptimizePruneColumns(p);
+  MY_LOGO("OptimizeColumnPruning(p)\n%s\n\n", p->ToString().c_str());
   p = OptimizeMergeProjection(p);
-  // fmt::print("OptimizeMergeProjection(p)1\n{}\n\n", *p);
+  MY_LOGO("OptimizeMergeProjection(p)\n%s\n\n", p->ToString().c_str());
   p = OptimizeFilter(p);
   p = OptimizeEliminateTrueFalseFilter(p);
-  // fmt::print("OptimizeFilter(p)\n{}\n\n", *p);
+  MY_LOGO("OptimizeEliminateTrueFalseFilter(p)\n%s\n\n", p->ToString().c_str());
+  p = OptimizeLeftJoinAsInnerJoin(p);
+  MY_LOGO("OptimizeLeftJoinAsInnerJoin(p)\n%s\n\n", p->ToString().c_str());
   p = OptimizeMergeFilterNLJ(p);  // 不能先调整order在merger filter nlj， filter pred顺序会不对
-  // fmt::print("OptimizeMergeFilterNLJ(p)\n{}\n\n", *p);
+  MY_LOGO("OptimizeMergeFilterNLJ(p)\n%s\n\n", p->ToString().c_str());
   p = OptimizePickIndex(p);
-  // fmt::print("OptimizePickIndex(p)\n{}\n\n", *p);
+  MY_LOGO("OptimizePickIndex(p)\n%s\n\n", p->ToString().c_str());
   p = OptimizeNLJAsIndexJoin(p);
-  // fmt::print("OptimizeNLJAsIndexJoin(p)\n{}\n\n", *p);
-  p = OptimizeNLS(p);
-  // fmt::print("OptimizeNLS(p)\n{}\n\n", *p);
+  MY_LOGO("OptimizeNLJAsIndexJoin(p)\n%s\n\n", p->ToString().c_str());
+  p = OptimizeNLJAndIndexJoin(p);
+  MY_LOGO("OptimizeNLS(p)\n%s\n\n", p->ToString().c_str());
   p = OptimizeJoinOrder(p);
-  // fmt::print("OptimizeJoinOrder(p)\n{}\n\n", *p);
-  p = OptimizeNLJPredicate(p);
-  // fmt::print("OptimizePredictPushDown(p)\n{}\n\n", *p);
+  MY_LOGO("OptimizeJoinOrder\n%s\n\n", p->ToString().c_str());
+  p = OptimizePredicatePushDown(p);
+  MY_LOGO("OptimizePredicatePushDown(p)\n%s\n\n", p->ToString().c_str());
   p = OptimizeMergeFilterScan(p);
-  // fmt::print("OptimizeMergeFilterScan(p)\n{}\n\n", *p);
+  MY_LOGO("OptimizeMergeFilterScan(p)\n%s\n\n", p->ToString().c_str());
   p = OptimizeNLJAsHashJoin(p);
-  // fmt::print("OptimizeNLJAsHashJoin(p)\n{}\n\n", *p);
-
+  MY_LOGO("OptimizeNLJAsHashJoin(p)\n%s\n\n", p->ToString().c_str());
   p = OptimizeOrderByAsIndexScan(p);
   p = OptimizeSortLimitAsTopN(p);
-  // fmt::print("final plan\n{}\n\n", *p);
+  MY_LOGO("final plan\n%s\n\n", p->ToString().c_str());
   return p;
 }
 
@@ -92,8 +99,8 @@ Agg { types=[count_star, max, max, max, max, max, max], aggregates=[1, #0.0, #0.
 */
 
 // TODO(wxx) bug in column pruning, if we first column pruning than merge projection
-// select colA from (select colC, colA, colB, from temp_2 order by colC - colB + colA, colA limit 20);
-auto Optimizer::OptimizeColumnPruning(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef {
+// select colA from (select colC, colA, colB, from test_1 order by colC - colB + colA, colA limit 20);
+auto Optimizer::OptimizePruneColumns(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef {
   auto optimized_plan = plan;
   if (plan->GetType() == PlanType::Projection) {
     const auto &projection_plan = static_cast<const ProjectionPlanNode &>(*plan);
@@ -185,7 +192,7 @@ auto Optimizer::OptimizeColumnPruning(const AbstractPlanNodeRef &plan) -> Abstra
 
   std::vector<AbstractPlanNodeRef> children;
   for (const auto &child : optimized_plan->GetChildren()) {
-    children.emplace_back(OptimizeColumnPruning(child));
+    children.emplace_back(OptimizePruneColumns(child));
   }
   optimized_plan = optimized_plan->CloneWithChildren(std::move(children));
   return optimized_plan;
@@ -233,12 +240,12 @@ auto Optimizer::OptimizeJoinOrder(const AbstractPlanNodeRef &plan) -> AbstractPl
   return optimized_plan;
 }
 
-auto Optimizer::OptimizeNLJPredicate(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef {
+auto Optimizer::OptimizePredicatePushDown(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef {
   auto optimized_plan = plan;
 
   std::vector<AbstractExpressionRef> left_cmp_exprs;
   std::vector<AbstractExpressionRef> right_cmp_exprs;
-  std::vector<AbstractExpressionRef> col_equal_exprs;
+  std::vector<AbstractExpressionRef> exprs_to_stay;
 
   std::function<bool(const AbstractExpressionRef &)> find_exprs = [&](const AbstractExpressionRef &pred) -> bool {
     if (const auto *logic_expr = dynamic_cast<const LogicExpression *>(pred.get()); logic_expr != nullptr) {
@@ -254,7 +261,7 @@ auto Optimizer::OptimizeNLJPredicate(const AbstractPlanNodeRef &plan) -> Abstrac
           left_expr != nullptr) {
         if (const auto *right_expr = dynamic_cast<const ColumnValueExpression *>(cmp_expr->GetChildAt(1).get());
             right_expr != nullptr) {
-          col_equal_exprs.emplace_back(std::make_shared<ComparisonExpression>(
+          exprs_to_stay.emplace_back(std::make_shared<ComparisonExpression>(
               cmp_expr->GetChildAt(0), cmp_expr->GetChildAt(1), cmp_expr->comp_type_));
           return true;
         }
@@ -321,7 +328,7 @@ auto Optimizer::OptimizeNLJPredicate(const AbstractPlanNodeRef &plan) -> Abstrac
           const auto left_plan_type = left_plan->GetType();
           const auto right_plan_type = right_plan->GetType();
 
-          auto new_nlj_expr = BuildExprTree(col_equal_exprs);
+          auto new_nlj_expr = BuildExprTree(exprs_to_stay);
 
           if (!left_cmp_exprs.empty()) {
             AbstractExpressionRef new_expr = BuildExprTree(left_cmp_exprs);
@@ -364,7 +371,7 @@ auto Optimizer::OptimizeNLJPredicate(const AbstractPlanNodeRef &plan) -> Abstrac
   }
   std::vector<AbstractPlanNodeRef> children;
   for (const auto &child : optimized_plan->GetChildren()) {
-    children.emplace_back(OptimizeNLJPredicate(child));
+    children.emplace_back(OptimizePredicatePushDown(child));
   }
   optimized_plan = optimized_plan->CloneWithChildren(std::move(children));
   return optimized_plan;
@@ -459,10 +466,98 @@ auto Optimizer::OptimizePickIndex(const AbstractPlanNodeRef &plan) -> AbstractPl
   return optimized_plan;
 }
 
-auto Optimizer::OptimizeNLS(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef {
+auto Optimizer::OptimizeLeftJoinAsInnerJoin(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef {
   std::vector<AbstractPlanNodeRef> children;
   for (const auto &child : plan->GetChildren()) {
-    children.emplace_back(OptimizeNLS(child));
+    children.emplace_back(OptimizeLeftJoinAsInnerJoin(child));
+  }
+  auto optimized_plan = plan->CloneWithChildren(std::move(children));
+
+  if (optimized_plan->GetType() == PlanType::Filter) {
+    const auto &filter_plan = static_cast<const FilterPlanNode &>(*optimized_plan);
+    const auto &child_plan = filter_plan.GetChildPlan();
+    if (child_plan->GetType() == PlanType::NestedLoopJoin) {
+      const auto &nlj_plan = static_cast<const NestedLoopJoinPlanNode &>(*child_plan);
+      if (nlj_plan.GetJoinType() == JoinType::LEFT) {
+        uint32_t offset = nlj_plan.GetLeftPlan()->OutputSchema().GetColumnCount();
+        std::function<bool(const AbstractExpressionRef &)> find_if_use_null =
+            [&](const AbstractExpressionRef &pred) -> bool {
+          if (const auto *logic_expr = dynamic_cast<const LogicExpression *>(pred.get()); logic_expr != nullptr) {
+            if (logic_expr->logic_type_ == LogicType::Or) {
+              return false;
+            }
+            return find_if_use_null(pred->GetChildAt(0)) && find_if_use_null(pred->GetChildAt(1));
+          }
+          // 某个谓词的表达式用 NULL 计算后会得到 false 或者 NULL, 也就是说右表NULL总会被过滤掉
+          if (const auto *cmp_expr = dynamic_cast<const ComparisonExpression *>(pred.get()); cmp_expr != nullptr) {
+            if (const auto *expr = dynamic_cast<const ColumnValueExpression *>(cmp_expr->GetChildAt(0).get());
+                expr != nullptr) {
+              if (expr->GetColIdx() >= offset) {
+                return false;
+              }
+            }
+            if (const auto *expr = dynamic_cast<const ColumnValueExpression *>(cmp_expr->GetChildAt(1).get());
+                expr != nullptr) {
+              if (expr->GetColIdx() >= offset) {
+                return false;
+              }
+            }
+          }
+          return true;
+        };
+
+        bool use_null = find_if_use_null(filter_plan.predicate_);
+        if (!use_null) {
+          auto new_nlj_plan = std::make_shared<NestedLoopJoinPlanNode>(
+              nlj_plan.output_schema_, nlj_plan.GetLeftPlan(), nlj_plan.GetRightPlan(),
+              RewriteTupleIndex(nlj_plan.predicate_), JoinType::INNER);
+          return optimized_plan->CloneWithChildren({new_nlj_plan});
+        }
+      }
+    }
+  }
+
+  if (optimized_plan->GetType() == PlanType::Aggregation) {
+    const auto &agg_plan = static_cast<const AggregationPlanNode &>(*optimized_plan);
+    const auto &child_plan = agg_plan.GetChildPlan();
+    if (child_plan->GetType() == PlanType::NestedLoopJoin) {
+      const auto &nlj_plan = static_cast<const NestedLoopJoinPlanNode &>(*child_plan);
+      bool use_rigth = false;
+      if (nlj_plan.GetJoinType() == JoinType::LEFT) {
+        uint32_t offset = nlj_plan.GetLeftPlan()->OutputSchema().GetColumnCount();
+
+        for (const auto &pred : agg_plan.aggregates_) {
+          const auto *col_val_expr = dynamic_cast<const ColumnValueExpression *>(pred.get());
+          assert(col_val_expr);
+          if (col_val_expr->GetColIdx() >= offset) {
+            use_rigth = true;
+          }
+        }
+
+        for (const auto &pred : agg_plan.group_bys_) {
+          const auto *col_val_expr = dynamic_cast<const ColumnValueExpression *>(pred.get());
+          assert(col_val_expr);
+          if (col_val_expr->GetColIdx() >= offset) {
+            use_rigth = true;
+          }
+        }
+
+        if (!use_rigth) {
+          auto new_nlj_plan = std::make_shared<NestedLoopJoinPlanNode>(
+              nlj_plan.output_schema_, nlj_plan.GetLeftPlan(), nlj_plan.GetRightPlan(),
+              RewriteTupleIndex(nlj_plan.predicate_), JoinType::INNER);
+          return optimized_plan->CloneWithChildren({new_nlj_plan});
+        }
+      }
+    }
+  }
+  return optimized_plan;
+}
+
+auto Optimizer::OptimizeNLJAndIndexJoin(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef {
+  std::vector<AbstractPlanNodeRef> children;
+  for (const auto &child : plan->GetChildren()) {
+    children.emplace_back(OptimizeNLJAndIndexJoin(child));
   }
   auto optimized_plan = plan->CloneWithChildren(std::move(children));
 
@@ -651,15 +746,14 @@ auto Optimizer::EstimatePlan(const AbstractPlanNodeRef &plan) -> std::optional<s
 }
 
 auto Optimizer::BuildExprTree(const std::vector<AbstractExpressionRef> &exprs) -> AbstractExpressionRef {
+  assert(!exprs.empty());
   if (exprs.size() == 1) {
-    // fmt::print("{}\n", exprs[0]);
     return exprs[0];
   }
   auto logic_root = std::make_shared<LogicExpression>(exprs[0], exprs[1], LogicType::And);
   for (uint64_t i = 2; i < exprs.size(); i++) {
     logic_root = std::make_shared<LogicExpression>(logic_root, exprs[i], LogicType::And);
   }
-  // fmt::print("{}\n", logic_root);
   return logic_root;
 }
 

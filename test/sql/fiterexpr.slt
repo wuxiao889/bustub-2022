@@ -1,0 +1,7 @@
+# Ensure all order-bys in this file are transformed into index scan
+statement ok
+set force_optimizer_starter_rule=yes
+
+statement ok
+select * from (__mock_t3_1k a inner join __mock_t2_100k b on a.v1 = b.v1) inner join t1 c on a.v1 = c.v1;
+----

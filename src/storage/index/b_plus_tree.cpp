@@ -456,7 +456,9 @@ auto BPLUSTREE_TYPE::RemovePessimistic(const KeyType &key, Transaction *transact
 
   auto set = transaction->GetDeletedPageSet();
   for (auto page_id : *transaction->GetDeletedPageSet()) {
-    buffer_pool_manager_->DeletePage(page_id);
+    bool ok = buffer_pool_manager_->DeletePage(page_id);
+    (void)ok;
+    assert(ok);
   }
   transaction->GetDeletedPageSet()->clear();
   // buffer_pool_manager_->CheckPinCount();

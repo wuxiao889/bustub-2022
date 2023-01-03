@@ -4,7 +4,7 @@ explain (o) select v, d1, d2 from (
         v, max(v1) as d1, max(v1) + max(v1) + max(v2) as d2,
         min(v1), max(v2), min(v2), max(v1) + min(v1), max(v2) + min(v2), min(v1), max(v2), min(v2), max(v1) + min(v1), max(v2) + min(v2), min(v1), max(v2), min(v2), max(v1) + min(v1), max(v2) + min(v2), min(v1), max(v2), min(v2), max(v1) + min(v1), max(v2) + min(v2), min(v1), max(v2), min(v2), max(v1) + min(v1), max(v2) + min(v2), min(v1), max(v2), min(v2), max(v1) + min(v1), max(v2) + min(v2), min(v1), max(v2), min(v2), max(v1) + min(v1), max(v2) + min(v2), min(v1), max(v2), min(v2), max(v1) + min(v1), max(v2) + min(v2)
     from __mock_t7 left join (select v4 from __mock_t8 where 1 == 2) on v < v4 group by v
-)
+);
 
 statement ok +timing:x10:.q3
 select v, d1, d2 from (
@@ -12,4 +12,4 @@ select v, d1, d2 from (
         v, max(v1) as d1, max(v1) + max(v1) + max(v2) as d2,
         min(v1), max(v2), min(v2), max(v1) + min(v1), max(v2) + min(v2), min(v1), max(v2), min(v2), max(v1) + min(v1), max(v2) + min(v2), min(v1), max(v2), min(v2), max(v1) + min(v1), max(v2) + min(v2), min(v1), max(v2), min(v2), max(v1) + min(v1), max(v2) + min(v2), min(v1), max(v2), min(v2), max(v1) + min(v1), max(v2) + min(v2), min(v1), max(v2), min(v2), max(v1) + min(v1), max(v2) + min(v2), min(v1), max(v2), min(v2), max(v1) + min(v1), max(v2) + min(v2), min(v1), max(v2), min(v2), max(v1) + min(v1), max(v2) + min(v2)
     from __mock_t7 left join (select v4 from __mock_t8 where 1 == 2) on v < v4 group by v
-)
+);

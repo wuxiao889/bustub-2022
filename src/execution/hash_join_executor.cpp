@@ -18,6 +18,7 @@
 #include "execution/plans/hash_join_plan.h"
 #include "execution/plans/nested_loop_join_plan.h"
 #include "optimizer/optimizer.h"
+#include "type/value.h"
 #include "type/value_factory.h"
 // Note for 2022 Fall: You don't need to implement HashJoinExecutor to pass all tests. You ONLY need to implement it
 // if you want to get faster in leaderboard tests.
@@ -63,6 +64,7 @@ void HashJoinExecutor::Init() {
   const auto left_size = Optimizer::EstimatePlan(plan_->GetLeftPlan());
   if (left_size) {
     left_ht_.reserve(left_size.value() / 3);
+    not_joined_.reserve(left_size.value() / 3);
   }
 
   while (left_child_executor_->Next(&tuple, &rid)) {

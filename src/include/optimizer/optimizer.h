@@ -43,7 +43,7 @@ class Optimizer {
    */
   auto OptimizeMergeProjection(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef;
 
-  auto OptimizeColumnPruning(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef;
+  auto OptimizePruneColumns(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef;
   /**
    * @brief merge filter condition into nested loop join.
    * In planner, we plan cross join + filter with cross product (done with nested loop join) and a filter plan node. We
@@ -83,7 +83,7 @@ class Optimizer {
    */
   auto OptimizeJoinOrder(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef;
 
-  auto OptimizeNLJPredicate(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef;
+  auto OptimizePredicatePushDown(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef;
 
   /**
    * @brief optimize filter plan predicate
@@ -92,7 +92,7 @@ class Optimizer {
 
   auto OptimizePickIndex(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef;
 
-  auto OptimizeNLS(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef;
+  auto OptimizeNLJAndIndexJoin(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef;
   /**
    * @brief 优化逻辑表达式中的常量
    */
@@ -128,6 +128,8 @@ class Optimizer {
    * @brief optimize sort + limit as top N
    */
   auto OptimizeSortLimitAsTopN(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef;
+
+  auto OptimizeLeftJoinAsInnerJoin(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef;
 
   /**
    * @brief get the estimated cardinality for a table based on the table name. Useful when join reordering. BusTub
