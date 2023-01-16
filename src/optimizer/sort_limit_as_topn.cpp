@@ -16,12 +16,12 @@ auto Optimizer::OptimizeSortLimitAsTopN(const AbstractPlanNodeRef &plan) -> Abst
   }
   auto optimized_plan = plan->CloneWithChildren(std::move(children));
   if (optimized_plan->GetType() == PlanType::Limit) {
-    const auto &limit_plan = dynamic_cast<const LimitPlanNode &>(*optimized_plan);
+    const auto &limit_plan = static_cast<const LimitPlanNode &>(*optimized_plan);
     BUSTUB_ASSERT(limit_plan.children_.size() == 1, "sort should have 1 children");
     const auto &child_plan = limit_plan.GetChildPlan();
     const auto limit = limit_plan.GetLimit();
     if (child_plan->GetType() == PlanType::Sort) {
-      const auto &sort_plan = dynamic_cast<const SortPlanNode &>(*child_plan);
+      const auto &sort_plan = static_cast<const SortPlanNode &>(*child_plan);
       const auto &order_bys = sort_plan.GetOrderBy();
       return std::make_shared<TopNPlanNode>(limit_plan.output_schema_, sort_plan.GetChildPlan(), order_bys, limit);
     }
