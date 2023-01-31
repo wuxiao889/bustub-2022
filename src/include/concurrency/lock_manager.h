@@ -420,8 +420,7 @@ class LockManager {
   std::mutex waits_for_latch_;  //
 
   std::vector<txn_id_t> waits_;
-  std::unordered_map<txn_id_t, std::variant<table_oid_t, RID>> txn_variant_map_;
-  std::mutex txn_variant_map_latch_;  //
+  std::unordered_map<txn_id_t, std::shared_ptr<LockRequestQueue>>  txn_wait_map_;
 };
 
 /*

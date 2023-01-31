@@ -64,37 +64,37 @@ auto UpdateExecutor::Next(Tuple *tuple, RID *rid) -> bool {
 }
 
 void UpdateExecutor::LockTable() {
-  // const auto &lock_mgr = exec_ctx_->GetLockManager();
-  // const auto &txn = exec_ctx_->GetTransaction();
-  // const auto oid = plan_->table_oid_;
+  const auto &lock_mgr = exec_ctx_->GetLockManager();
+  const auto &txn = exec_ctx_->GetTransaction();
+  const auto oid = plan_->table_oid_;
 
-  // try {
-  //   bool res = true;
-  //   if (txn->GetIsolationLevel() != IsolationLevel::READ_UNCOMMITTED) {
-  //     res = lock_mgr->LockTable(exec_ctx_->GetTransaction(), LockManager::LockMode::INTENTION_EXCLUSIVE, oid);
-  //   }
-  //   if (!res) {
-  //     assert(txn->GetState() == TransactionState::ABORTED);
-  //     throw ExecutionException("UpdateExecutor::Init() lock fail");
-  //   }
-  // } catch (TransactionAbortException &e) {
-  //   assert(txn->GetState() == TransactionState::ABORTED);
-  //   throw ExecutionException("UpdateExecutor::Init() lock fail");
-  // }
+  try {
+    bool res = true;
+    if (txn->GetIsolationLevel() != IsolationLevel::READ_UNCOMMITTED) {
+      res = lock_mgr->LockTable(exec_ctx_->GetTransaction(), LockManager::LockMode::INTENTION_EXCLUSIVE, oid);
+    }
+    if (!res) {
+      assert(txn->GetState() == TransactionState::ABORTED);
+      throw ExecutionException("UpdateExecutor::Init() lock fail");
+    }
+  } catch (TransactionAbortException &e) {
+    assert(txn->GetState() == TransactionState::ABORTED);
+    throw ExecutionException("UpdateExecutor::Init() lock fail");
+  }
 }
 
 void UpdateExecutor::LockRow(const RID &rid) {
-  // const auto &txn = exec_ctx_->GetTransaction();
-  // const auto &lock_mgr = exec_ctx_->GetLockManager();
-  // const auto oid = plan_->table_oid_;
-  // bool res = true;
-  // if (txn->GetIsolationLevel() != IsolationLevel::READ_UNCOMMITTED) {
-  //   res = lock_mgr->LockRow(txn, LockManager::LockMode::EXCLUSIVE, oid, rid);
-  // }
-  // if (!res) {
-  //   txn->SetState(TransactionState::ABORTED);
-  //   throw ExecutionException("InsertExecutor::Next() lock fail");
-  // }
+  const auto &txn = exec_ctx_->GetTransaction();
+  const auto &lock_mgr = exec_ctx_->GetLockManager();
+  const auto oid = plan_->table_oid_;
+  bool res = true;
+  if (txn->GetIsolationLevel() != IsolationLevel::READ_UNCOMMITTED) {
+    res = lock_mgr->LockRow(txn, LockManager::LockMode::EXCLUSIVE, oid, rid);
+  }
+  if (!res) {
+    txn->SetState(TransactionState::ABORTED);
+    throw ExecutionException("InsertExecutor::Next() lock fail");
+  }
 }
 
 }  // namespace bustub

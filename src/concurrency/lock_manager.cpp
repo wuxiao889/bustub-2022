@@ -257,9 +257,6 @@ auto LockManager::LockTable(Transaction *txn, LockMode lock_mode, const table_oi
   auto table_lock_map_it = table_lock_map_.find(oid);
   std::shared_ptr<LockRequestQueue> lrque;
   auto lock_request = std::make_shared<LockRequest>(txn_id, lock_mode, oid);
-  txn_variant_map_latch_.lock();
-  txn_variant_map_[txn_id] = oid;
-  txn_variant_map_latch_.unlock();
 
   MY_LOGT(YELLOW("txn {} {} locktable   {} {:^5}"), txn_id, txn_level, oid, lock_mode);
 
@@ -267,6 +264,7 @@ auto LockManager::LockTable(Transaction *txn, LockMode lock_mode, const table_oi
     lrque = table_lock_map_it->second;
     // 注意顺序，否则会出现txn乱序
     std::unique_lock lock(lrque->latch_);
+    txn_wait_map_[txn_id] = lrque;
     table_lock_map_latch_.unlock();
     auto &request_queue = lrque->request_queue_;
     decltype(request_queue.begin()) request_it;
@@ -545,13 +543,11 @@ auto LockManager::LockRow(Transaction *txn, LockMode lock_mode, const table_oid_
 
   auto lock_request = std::make_shared<LockRequest>(txn_id, lock_mode, oid, rid);
   assert(txn->GetState() != TransactionState::ABORTED);
-  txn_variant_map_latch_.lock();
-  txn_variant_map_[txn_id] = rid;
-  txn_variant_map_latch_.unlock();
 
   if (row_lock_map_it != row_lock_map_.end()) {
     lrque = row_lock_map_it->second;
     std::unique_lock lock(lrque->latch_);
+    txn_wait_map_[txn_id] = lrque;
     row_lock_map_latch_.unlock();
 
     auto &request_queue = lrque->request_queue_;
@@ -815,23 +811,9 @@ void LockManager::RunCycleDetection() {
       while (HasCycle(&txn_id)) {
         const auto &txn = TransactionManager::GetTransaction(txn_id);
         txn->SetState(TransactionState::ABORTED);
-
-        txn_variant_map_latch_.lock();
-        if (const auto *p = std::get_if<table_oid_t>(&txn_variant_map_[txn_id])) {
-          txn_variant_map_latch_.unlock();
-          const auto tid = *p;
-          MY_LOGC(BRED("mabort txn %d waits for table {}"), txn_id, tid);
-          auto &lock_request_que = table_lock_map_[tid];
-          remove_edges(lock_request_que, txn_id);
-          lock_request_que->cv_.notify_all();
-        } else {
-          const auto rid = std::get<RID>(txn_variant_map_[txn_id]);
-          txn_variant_map_latch_.unlock();
-          MY_LOGC(BRED("mabort {} waits for tuple {}"), txn_id, rid);
-          auto &lock_request_que = row_lock_map_[rid];
-          remove_edges(lock_request_que, txn_id);
-          lock_request_que->cv_.notify_all();
-        }
+        auto& lrque = txn_wait_map_[txn_id];
+        remove_edges(lrque, txn_id);
+        lrque->cv_.notify_all();
       }
 
       MY_LOGC(RED("mfinish round {}"), round++);
